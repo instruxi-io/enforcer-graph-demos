@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  graphwatch:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: graphwatch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: graphwatch/go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go build ./... && go vet ./... && go test ./...
+
+  graph-live:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: graph-live
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # @instruxi-io packages come from GitHub Packages; .npmrc reads the token
+      # from the environment and never stores it.
+      - run: npm ci --no-audit --no-fund
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm run typecheck
+      - run: npm run build
