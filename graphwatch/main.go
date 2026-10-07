@@ -70,16 +70,20 @@ func watchMain() {
 		return
 	}
 
+	if *graphID == "" && !*demoMode {
+		// Bare command: a picker on a terminal, help (exit 2) otherwise.
+		if !isTerminal(os.Stdin) {
+			runHelp(nil, os.Stderr, os.Stderr)
+			os.Exit(exitUsage)
+		}
+		os.Exit(runPicker(*keyFile, *base, *fps, *motion == "continuous"))
+	}
+
 	cred, _, baseURL, err := resolveFromProcess(*keyFile, *base)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, strings.TrimPrefix(err.Error(), "graphwatch: "))
 		os.Exit(2)
 	}
-	if *graphID == "" && !*demoMode {
-		fmt.Fprintln(os.Stderr, "graphwatch: --graph <id> or --demo")
-		os.Exit(2)
-	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	c := newClient(baseURL, cred)
@@ -107,6 +111,16 @@ func watchMain() {
 		fmt.Fprintln(os.Stderr, "graphwatch:", err)
 		os.Exit(1)
 	}
+	watchLoop(ctx, cancel, c, g, v, d, *fps, *stay, nil)
+	fmt.Printf("graphwatch: %s (%s)\n", g.Slug, *graphID)
+}
+
+// watchLoop is the frame loop: read, listen, diff, draw. keys is nil unless the
+// picker started the view; then q or Esc ends the loop and it reports back=true
+// so the caller returns to the picker instead of exiting.
+func watchLoop(ctx context.Context, cancel context.CancelFunc, c *client, g apiGraph, v *view, d *demo, fps int, stay bool, keys <-chan string) (back bool) {
+	graphID := &g.ID
+	stayP, fpsP := &stay, &fps
 	v.title = g.Slug
 	if g.DependencyEdgeType != "" {
 		v.edgeT = g.DependencyEdgeType
@@ -163,7 +177,7 @@ func watchMain() {
 	w, h := termSize()
 	sizeT := time.NewTicker(time.Second)
 	defer sizeT.Stop()
-	frameT := time.NewTicker(time.Second / time.Duration(max(*fps, 1)))
+	frameT := time.NewTicker(time.Second / time.Duration(max(*fpsP, 1)))
 	defer frameT.Stop()
 	last := time.Now()
 	var scr screen
@@ -172,6 +186,11 @@ loop:
 		select {
 		case <-ctx.Done():
 			break loop
+		case k := <-keys:
+			if k == "q" || k == "esc" || k == "ctrl-c" {
+				back = keys != nil && k != "ctrl-c"
+				break loop
+			}
 		case <-sizeT.C:
 			if nw, nh := termSize(); nw != w || nh != h {
 				w, h = nw, nh
@@ -183,7 +202,7 @@ loop:
 			if out := scr.diff(v.frame(w, h, dt)); out != "" {
 				os.Stdout.WriteString(out)
 			}
-			if at, ok := v.completed(); ok && !*stay && (d == nil || d.planned.Load()) && time.Since(at) > 6*time.Second {
+			if at, ok := v.completed(); ok && !*stayP && (d == nil || d.planned.Load()) && time.Since(at) > 6*time.Second {
 				break loop
 			}
 		}
@@ -191,7 +210,7 @@ loop:
 	cancel()
 	wg.Wait()
 	restore()
-	fmt.Printf("graphwatch: %s (%s)\n", g.Slug, *graphID)
+	return back
 }
 
 // termSize asks stty, so the command needs nothing outside the standard
