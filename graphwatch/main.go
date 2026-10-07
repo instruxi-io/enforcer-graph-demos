@@ -19,7 +19,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -43,7 +42,8 @@ func main() {
 
 // watchMain is the bare-flag form (--graph, --demo): the default command.
 func watchMain() {
-	base := flag.String("base", envOr("GRAPH_BASE_URL", "https://api.instruxi.dev"), "api origin")
+	base := flag.String("base", "", "api origin (default: GRAPH_BASE_URL, the plugin's saved base_url, then https://api.instruxi.dev)")
+	keyFile := flag.String("api-key-file", "", "read the API key from this file (first in the credential order)")
 	graphID := flag.String("graph", "", "graph id to watch")
 	demoMode := flag.Bool("demo", false, "create a graph, grow it and work it while watching; with --layout mycelium, an offline demo that needs no API")
 	size := flag.Int("size", 36, "demo: nodes to plan")
@@ -70,9 +70,9 @@ func watchMain() {
 		return
 	}
 
-	cred, err := credentialFromEnv()
+	cred, _, baseURL, err := resolveFromProcess(*keyFile, *base)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "graphwatch:", err)
+		fmt.Fprintln(os.Stderr, strings.TrimPrefix(err.Error(), "graphwatch: "))
 		os.Exit(2)
 	}
 	if *graphID == "" && !*demoMode {
@@ -82,7 +82,7 @@ func watchMain() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	c := newClient(*base, cred)
+	c := newClient(baseURL, cred)
 	v := newView()
 	v.continuous = *motion == "continuous"
 	if v.mycelium = *layout == "mycelium"; v.mycelium {
@@ -192,24 +192,6 @@ loop:
 	wg.Wait()
 	restore()
 	fmt.Printf("graphwatch: %s (%s)\n", g.Slug, *graphID)
-}
-
-// credentialFromEnv resolves GRAPH_AUTH_HELPER (OAuth, preferred: a command
-// printing the auth headers as JSON, fed by /enforcer:login, so no long-lived
-// key sits in the environment) then GRAPH_API_KEY. The auth-resolution task
-// replaces this function.
-func credentialFromEnv() (credential, error) {
-	if cmd := strings.TrimSpace(os.Getenv("GRAPH_AUTH_HELPER")); cmd != "" {
-		h := &helper{cmd: cmd}
-		if _, err := h.headers(context.Background(), false); err != nil {
-			return nil, err
-		}
-		return h, nil
-	}
-	if key := os.Getenv("GRAPH_API_KEY"); key != "" {
-		return apiKey(key), nil
-	}
-	return nil, errors.New("set GRAPH_AUTH_HELPER (OAuth, preferred) or GRAPH_API_KEY")
 }
 
 // termSize asks stty, so the command needs nothing outside the standard
