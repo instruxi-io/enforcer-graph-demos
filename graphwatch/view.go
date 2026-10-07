@@ -71,6 +71,7 @@ type view struct {
 	grown    *grown // the hyphae, grown once per mycKey
 	topoSig  string // nodes and dependency edges; topo moves only when it does
 	doneSeq  int
+	insp     *inspector // the node inspector; nil draws nothing
 }
 
 func newView() *view {
@@ -214,6 +215,9 @@ func (v *view) event(ev sseEvent) {
 			}
 			name = s
 		}
+	}
+	if v.insp != nil && id != "" {
+		v.insp.notify(id) // the hook point: every event for a node refetches its panel
 	}
 	// A run row names its node only on run.started; remember it, so the
 	// finish can say what finished.
@@ -559,6 +563,8 @@ func (v *view) frame(w, h int, dt float64) string {
 		c.put(2, row, t.at.Format("15:04:05"), dim.scale(0.5+0.5*fade), false)
 		c.put(12, row, t.text, rgb{70, 72, 90}.mix(t.col, 0.3+0.7*fade), age < 1.5)
 	}
+
+	v.drawInspector(c, w, h, ids)
 
 	var b strings.Builder
 	c.render(&b)
