@@ -1,0 +1,36 @@
+name: release
+
+# Builds graphwatch for every platform on a version tag and attaches the
+# binaries and their SHA-256 checksums to the GitHub release.
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  graphwatch:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: graphwatch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: graphwatch/go.mod
+      - run: go test ./...
+      - name: build
+        run: |
+          mkdir -p dist
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=${t%/*}; arch=${t#*/}; ext=; [ "$os" = windows ] && ext=.exe
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "dist/graphwatch-$os-$arch$ext" .
+          done
+          (cd dist && sha256sum graphwatch-* > SHA256SUMS)
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "graphwatch $GITHUB_REF_NAME" --notes "Terminal viewer for Enforcer Graph plans. Download the binary for your platform, check it against SHA256SUMS, make it executable, and run \`graphwatch --demo --layout mycelium\` for the offline demo."
