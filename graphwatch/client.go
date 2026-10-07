@@ -81,7 +81,9 @@ func (c *client) do(ctx context.Context, method, path string, body, out any) err
 		if len(body) > 200 {
 			body = body[:200] + "…"
 		}
-		return &apiError{status: resp.StatusCode, msg: fmt.Sprintf("%s %s: %d %s", method, path, resp.StatusCode, body)}
+		code, detail := parseErrorEnvelope(b)
+		return &apiError{status: resp.StatusCode, code: code, detail: detail,
+			msg: fmt.Sprintf("%s %s: %d %s", method, path, resp.StatusCode, body)}
 	}
 	if out != nil {
 		return json.Unmarshal(b, out)
@@ -93,6 +95,8 @@ func (c *client) do(ctx context.Context, method, path string, body, out any) err
 type apiError struct {
 	status int
 	msg    string
+	code   string // machine code from the error envelope
+	detail string // message from the error envelope
 }
 
 func (e *apiError) Error() string { return e.msg }
