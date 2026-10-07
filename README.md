@@ -19,6 +19,26 @@ go run . --demo --layout mycelium
 A three-root, depth-four plan is worked in-process and drawn as hyphae growing
 from the roots to the leaves. Nothing leaves your machine.
 
+## Install graphwatch without Go
+
+Every version tag publishes graphwatch as a single static binary for Linux,
+macOS and Windows on amd64 and arm64, with a `SHA256SUMS` file, on the
+[releases page](https://github.com/instruxi-io/enforcer-graph-demos/releases).
+
+```bash
+# macOS on Apple silicon; swap the suffix for linux-amd64, linux-arm64, darwin-amd64
+curl -fsSLO https://github.com/instruxi-io/enforcer-graph-demos/releases/latest/download/graphwatch-darwin-arm64
+curl -fsSLO https://github.com/instruxi-io/enforcer-graph-demos/releases/latest/download/SHA256SUMS
+grep graphwatch-darwin-arm64 SHA256SUMS | shasum -a 256 -c
+chmod +x graphwatch-darwin-arm64 && mv graphwatch-darwin-arm64 /usr/local/bin/graphwatch
+graphwatch --demo --layout mycelium
+```
+
+On macOS a downloaded binary is quarantined; clear it with
+`xattr -d com.apple.quarantine /usr/local/bin/graphwatch` if Gatekeeper refuses it.
+To vendor it into another repository, commit the binary for your platform with
+its checksum line, or pin a release tag and download it in CI.
+
 ## Watch a real graph
 
 Both viewers talk to the graph API at `https://api.instruxi.dev` (override with
