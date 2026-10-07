@@ -34,6 +34,7 @@ type cliEnv struct {
 	// fs is the parsed flag set, so a command that declared flags through
 	// commandFlags reads them with fs.Lookup(name).Value.String().
 	fs *flag.FlagSet
+	source  string // credential source label, never a secret
 }
 
 type command struct {
@@ -93,11 +94,13 @@ type globalFlags struct {
 	json    *bool
 	limit   *int
 	noColor *bool
+	keyFile *string
 }
 
 func newGlobalFlags(fs *flag.FlagSet) globalFlags {
 	return globalFlags{
-		base:    fs.String("base", envOr("GRAPH_BASE_URL", "https://api.instruxi.dev"), "api origin"),
+		base:    fs.String("base", "", "api origin (default: GRAPH_BASE_URL, the plugin's saved base_url, then https://api.instruxi.dev)"),
+		keyFile: fs.String("api-key-file", "", "read the API key from this file (first in the credential order)"),
 		json:    fs.Bool("json", false, "print the API's data payload as JSON"),
 		limit:   fs.Int("limit", 0, "show at most this many rows (0: all)"),
 		noColor: fs.Bool("no-color", false, "no colour (NO_COLOR is also respected)"),
@@ -121,12 +124,12 @@ func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr 
 		fmt.Fprintln(stderr, "graphwatch: --limit must be 0 or more")
 		return exitUsage
 	}
-	cred, err := credentialFromEnv()
+	cred, source, base, err := resolveFromProcess(*g.keyFile, *g.base)
 	if err != nil {
-		fmt.Fprintln(stderr, "graphwatch:", err)
+		fmt.Fprintln(stderr, strings.TrimPrefix(err.Error(), "graphwatch: "))
 		return exitUsage
 	}
-	env := &cliEnv{client: newClient(*g.base, cred), base: *g.base, out: stdout, errOut: stderr,
+	env := &cliEnv{client: newClient(base, cred), base: base, source: source, out: stdout, errOut: stderr,
 		json: *g.json, limit: *g.limit, noColor: *g.noColor, isTTY: isTerminal(stdout), fs: fs}
 	return cmd.run(ctx, env, fs.Args())
 }
@@ -155,7 +158,7 @@ func runHelp(args []string, stdout, stderr io.Writer) int {
 	for _, c := range sortedCommands() {
 		fmt.Fprintf(stdout, "  %-12s %s\n", c.name, c.summary)
 	}
-	fmt.Fprintln(stdout, "\nglobal flags: --base <url>  --json  --limit <n>  --no-color")
+	fmt.Fprintln(stdout, "\nglobal flags: --base <url>  --json  --limit <n>  --no-color  --api-key-file <path>")
 	return exitOK
 }
 
@@ -204,4 +207,16 @@ func parseErrorEnvelope(b []byte) (code, msg string) {
 		}
 	}
 	return strings.TrimSpace(code), strings.TrimSpace(msg)
+}
+
+// resolveFromProcess is the one place a command, the watch path and --demo get
+// their credential: resolveCredential over the real environment. Its error
+// already carries the "graphwatch:" prefix and the order it looked in.
+func resolveFromProcess(keyFile, base string) (credential, string, string, error) {
+	home, _ := os.UserHomeDir()
+	cred, source, b, err := resolveCredential(os.LookupEnv, home, authFlags{apiKeyFile: keyFile, base: base})
+	if err != nil && !strings.HasPrefix(err.Error(), "graphwatch:") {
+		err = fmt.Errorf("graphwatch: %w", err)
+	}
+	return cred, source, b, err
 }

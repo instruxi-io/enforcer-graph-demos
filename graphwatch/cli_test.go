@@ -29,8 +29,8 @@ func TestRegistryDispatch(t *testing.T) {
 	if code != exitUsage || gotArgs != nil {
 		t.Fatalf("negative limit: code=%d args=%v", code, gotArgs)
 	}
-	// No credential: usage error.
-	t.Setenv("GRAPH_API_KEY", "")
+	// No credential anywhere (not even a plugin on this machine): usage error.
+	isolate(t)
 	var out, errb bytes.Buffer
 	if code, _ := dispatch([]string{name}, &out, &errb); code != exitUsage || !strings.Contains(errb.String(), "GRAPH_API_KEY") {
 		t.Fatalf("no cred: code=%d err=%q", code, errb.String())
