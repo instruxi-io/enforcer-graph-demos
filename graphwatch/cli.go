@@ -33,8 +33,8 @@ type cliEnv struct {
 	isTTY   bool
 	// fs is the parsed flag set, so a command that declared flags through
 	// commandFlags reads them with fs.Lookup(name).Value.String().
-	fs *flag.FlagSet
-	source  string // credential source label, never a secret
+	fs     *flag.FlagSet
+	source string // credential source label, never a secret
 }
 
 type command struct {
