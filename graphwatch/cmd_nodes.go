@@ -25,7 +25,7 @@ func nodeData(raw json.RawMessage) map[string]any {
 	return m
 }
 
-func dash(s string) string {
+func nodeDash(s string) string {
 	if s == "" {
 		return "-"
 	}
@@ -102,7 +102,7 @@ func runNodes(ctx context.Context, env *cliEnv, args []string) int {
 		if t, ok := nodeData(n.Data)["tier"].(string); ok {
 			tier = t
 		}
-		rows[i] = []string{n.Key, n.Type, n.Status, n.WorkState, dash(tier), n.Title}
+		rows[i] = []string{n.Key, n.Type, n.Status, n.WorkState, nodeDash(tier), n.Title}
 	}
 	env.table([]string{"KEY", "TYPE", "STATUS", "WORK_STATE", "TIER", "TITLE"}, rows)
 	return exitOK
@@ -132,12 +132,12 @@ func runNodesShow(ctx context.Context, env *cliEnv, graphID, want string) int {
 	if err != nil {
 		return reportError(env.errOut, err)
 	}
-	runs, err := env.client.nodeRuns(ctx, graphID, id)
+	runs, err := env.client.nodeRunList(ctx, graphID, id)
 	if err != nil {
 		return reportError(env.errOut, err)
 	}
 	if env.json {
-		rs := make([]apiNodeRun, len(runs))
+		rs := make([]apiNodeRunRow, len(runs))
 		copy(rs, runs)
 		if err := renderJSON(env.out, map[string]any{"node": n.Raw, "runs": rs}); err != nil {
 			return reportError(env.errOut, err)
@@ -146,14 +146,14 @@ func runNodesShow(ctx context.Context, env *cliEnv, graphID, want string) int {
 	}
 	w := env.out
 	fmt.Fprintf(w, "key:         %s\nid:          %s\ntype:        %s\ntitle:       %s\n", n.Key, n.ID, n.Type, n.Title)
-	fmt.Fprintf(w, "status:      %s\nwork_state:  %s\n", n.Status, dash(n.WorkState))
+	fmt.Fprintf(w, "status:      %s\nwork_state:  %s\n", n.Status, nodeDash(n.WorkState))
 	if n.Reclaimable {
 		fmt.Fprintln(w, "reclaimable: true")
 	}
 	if n.OpensAt != nil {
 		fmt.Fprintf(w, "opens_at:    %s\n", n.OpensAt.Format("2006-01-02T15:04:05Z07:00"))
 	}
-	fmt.Fprintf(w, "assignee:    %s\n", dash(n.Assignee))
+	fmt.Fprintf(w, "assignee:    %s\n", nodeDash(n.Assignee))
 	if n.Description != "" {
 		fmt.Fprintf(w, "\ndescription:\n%s\n", n.Description)
 	}
@@ -167,7 +167,7 @@ func runNodesShow(ctx context.Context, env *cliEnv, graphID, want string) int {
 	rows := make([][]string, len(runs))
 	for i, r := range runs {
 		runner, _ := nodeData(r.Data)["runner"].(string)
-		rows[i] = []string{fmt.Sprint(r.Attempt), r.Status, dash(strings.TrimSpace(runner)), r.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
+		rows[i] = []string{fmt.Sprint(r.Attempt), r.Status, nodeDash(strings.TrimSpace(runner)), r.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
 	}
 	env.table([]string{"ATTEMPT", "STATUS", "RUNNER", "CREATED"}, rows)
 	return exitOK

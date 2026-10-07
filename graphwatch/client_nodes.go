@@ -25,8 +25,8 @@ type apiNodeFull struct {
 	Raw         json.RawMessage `json:"-"`
 }
 
-// apiNodeRun is one row of GET /graphs/{id}/nodes/{nodeId}/runs.
-type apiNodeRun struct {
+// apiNodeRunRow is one row of GET /graphs/{id}/nodes/{nodeId}/runs.
+type apiNodeRunRow struct {
 	ID        string          `json:"id"`
 	Attempt   int             `json:"attempt"`
 	Status    string          `json:"status"`
@@ -68,6 +68,6 @@ func (c *client) nodeFull(ctx context.Context, graphID, nodeID string) (apiNodeF
 	return ns[0], nil
 }
 
-func (c *client) nodeRuns(ctx context.Context, graphID, nodeID string) ([]apiNodeRun, error) {
-	return page[apiNodeRun](ctx, c, "/graphs/"+graphID+"/nodes/"+nodeID+"/runs")
+func (c *client) nodeRunList(ctx context.Context, graphID, nodeID string) ([]apiNodeRunRow, error) {
+	return page[apiNodeRunRow](ctx, c, "/graphs/"+graphID+"/nodes/"+nodeID+"/runs")
 }
