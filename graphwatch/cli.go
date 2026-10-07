@@ -31,6 +31,9 @@ type cliEnv struct {
 	limit   int
 	noColor bool
 	isTTY   bool
+	// fs is the parsed flag set, so a command that declared flags through
+	// commandFlags reads them with fs.Lookup(name).Value.String().
+	fs *flag.FlagSet
 }
 
 type command struct {
@@ -39,6 +42,10 @@ type command struct {
 }
 
 var commands = map[string]command{}
+
+// commandFlags lets a command declare its own flags on the shared flag set, so
+// they parse in any position (`work --state x`) next to the global ones.
+var commandFlags = map[string]func(fs *flag.FlagSet){}
 
 // register is called from a command's init(). A duplicate name is a programming
 // error, so it panics at start-up rather than silently shadowing.
@@ -101,6 +108,9 @@ func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr 
 	fs := flag.NewFlagSet("graphwatch "+cmd.name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	g := newGlobalFlags(fs)
+	if setup := commandFlags[cmd.name]; setup != nil {
+		setup(fs)
+	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
@@ -117,7 +127,7 @@ func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr 
 		return exitUsage
 	}
 	env := &cliEnv{client: newClient(*g.base, cred), base: *g.base, out: stdout, errOut: stderr,
-		json: *g.json, limit: *g.limit, noColor: *g.noColor, isTTY: isTerminal(stdout)}
+		json: *g.json, limit: *g.limit, noColor: *g.noColor, isTTY: isTerminal(stdout), fs: fs}
 	return cmd.run(ctx, env, fs.Args())
 }
 
@@ -132,6 +142,9 @@ func runHelp(args []string, stdout, stderr io.Writer) int {
 		fs := flag.NewFlagSet(cmd.name, flag.ContinueOnError)
 		fs.SetOutput(stdout)
 		newGlobalFlags(fs)
+		if setup := commandFlags[cmd.name]; setup != nil {
+			setup(fs)
+		}
 		fmt.Fprintln(stdout, "flags:")
 		fs.PrintDefaults()
 		return exitOK

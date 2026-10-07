@@ -26,7 +26,7 @@ func isOpenReview(state string) bool {
 	return true
 }
 
-func shortID(s string) string {
+func reviewShortID(s string) string {
 	if len(s) > 8 {
 		return s[:8]
 	}
@@ -98,7 +98,7 @@ func runReview(ctx context.Context, env *cliEnv, args []string) int {
 	}
 	rows := make([][]string, len(shown))
 	for i, it := range shown {
-		rows[i] = []string{shortID(it.ID), it.Kind, shortID(it.NodeID), shortID(it.RunID), it.State, age(it.CreatedAt), it.Reason}
+		rows[i] = []string{reviewShortID(it.ID), it.Kind, reviewShortID(it.NodeID), reviewShortID(it.RunID), it.State, age(it.CreatedAt), it.Reason}
 	}
 	env.table([]string{"ITEM", "KIND", "NODE", "RUN", "STATE", "AGE", "REASON"}, rows)
 	return exitOK
