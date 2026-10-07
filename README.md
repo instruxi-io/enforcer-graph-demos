@@ -9,6 +9,13 @@ completion judged against acceptance criteria before anything downstream unblock
 | [`graphwatch/`](./graphwatch) | A terminal viewer. Draws a graph as layered dots (or as a growing mycelium), animated from the graph's event stream. Go, standard library only. | No for the offline mycelium demo; yes to watch or demo a real graph |
 | [`graph-live/`](./graph-live) | A browser viewer. The same picture in React, plus a demo mode that creates a graph and works it the way a set of harnesses would. The minimal reference for the published `@instruxi-io/graph-hooks`. | Yes |
 
+## graphwatch commands
+
+`graphwatch` with no arguments opens a graph picker. Read-only commands:
+`whoami`, `graphs`, `nodes`, `edges`, `runs`, `review`, `epochs`, `access`,
+`recruiting`, `work`, `query`, `tail` and `help`. See
+[`graphwatch/README.md`](./graphwatch/README.md) for each with an example.
+
 ## Try it in thirty seconds, no account
 
 ```bash
