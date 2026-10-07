@@ -24,19 +24,32 @@ jobs:
       - run: go build ./... && go vet ./... && go test ./...
 
   graph-live:
+    # graph-live depends on @instruxi-io/graph-hooks, a private GitHub Packages
+    # package. This public repo's GITHUB_TOKEN cannot read it (npm E403), so the
+    # job builds only when a HOOKS_PACKAGES_TOKEN secret with read:packages is
+    # configured, and otherwise skips with a notice instead of failing every PR.
     runs-on: ubuntu-latest
+    env:
+      HOOKS_PACKAGES_TOKEN: ${{ secrets.HOOKS_PACKAGES_TOKEN }}
     defaults:
       run:
         working-directory: graph-live
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - if: env.HOOKS_PACKAGES_TOKEN == ''
+        working-directory: .
+        run: echo "::notice title=graph-live skipped::No HOOKS_PACKAGES_TOKEN secret; @instruxi-io/graph-hooks is private, so graph-live is built only where that token is configured."
+      - if: env.HOOKS_PACKAGES_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.HOOKS_PACKAGES_TOKEN != ''
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      # @instruxi-io packages come from GitHub Packages; .npmrc reads the token
-      # from the environment and never stores it.
-      - run: npm ci --no-audit --no-fund
+      # .npmrc reads the token from the environment and never stores it.
+      - if: env.HOOKS_PACKAGES_TOKEN != ''
+        run: npm ci --no-audit --no-fund
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npm run typecheck
-      - run: npm run build
+          GITHUB_TOKEN: ${{ secrets.HOOKS_PACKAGES_TOKEN }}
+      - if: env.HOOKS_PACKAGES_TOKEN != ''
+        run: npm run typecheck
+      - if: env.HOOKS_PACKAGES_TOKEN != ''
+        run: npm run build
