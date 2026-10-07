@@ -62,3 +62,9 @@ AGENTS.md     orientation for an agent working in this repository
 ```
 
 See [AGENTS.md](./AGENTS.md) before changing anything.
+
+## Licence and scope
+
+The demo clients in this repository are MIT licensed (see [LICENSE](./LICENSE)). The Enforcer Graph service and its API are not part of this licence and are not open source; using these viewers against a real plan requires an Enforcer account.
+
+`graph-live` builds on `@instruxi-io/graph-hooks`, which is distributed to Instruxi organisation members only. Outside the organisation, `graphwatch` (standard library only) is the client you can build and run, including the offline demo.
