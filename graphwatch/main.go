@@ -53,6 +53,7 @@ func watchMain() {
 	fps := flag.Int("fps", 15, "frames per second (only changed cells are sent)")
 	motion := flag.String("motion", "events", "events: motion follows graph events and a quiet graph stops drawing; continuous: running nodes pulse and stream particles every frame")
 	layout := flag.String("layout", "layers", "layers: top-to-bottom layers; mycelium: a radial growth view with roots at the centre")
+	flag.BoolVar(&noOverlays, "no-overlays", false, "plain header: no epoch, work_state counts, review holds, recruiting or stream cursor")
 	flag.Parse()
 	if *layout != "layers" && *layout != "mycelium" {
 		fmt.Fprintln(os.Stderr, "graphwatch: --layout must be layers or mycelium")
@@ -151,12 +152,28 @@ func watchLoop(ctx context.Context, cancel context.CancelFunc, c *client, g apiG
 			}
 		}
 	}()
+	var ov *overlays
+	ovPoke := func() {}
+	if !noOverlays {
+		ov = &overlays{}
+		v.ov = ov
+		ovPoke = startOverlays(ctx, c, *graphID, ov)
+	}
 	go c.stream(ctx, *graphID, func(ev sseEvent) {
 		v.event(ev)
 		if ev.Event != ":" {
 			poke()
+			if ov != nil {
+				ov.stream(ev)
+				ovPoke()
+			}
 		}
-	}, v.setLink)
+	}, func(s string) {
+		v.setLink(s)
+		if ov != nil {
+			ov.link(s)
+		}
+	})
 
 	// The inspector reads its own keys when no picker feeds them.
 	v.insp = newInspector()

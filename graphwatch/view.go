@@ -72,6 +72,7 @@ type view struct {
 	topoSig  string // nodes and dependency edges; topo moves only when it does
 	doneSeq  int
 	insp     *inspector // the node inspector; nil draws nothing
+	ov       *overlays  // plan-level header; nil keeps the plain header
 }
 
 func newView() *view {
@@ -542,6 +543,20 @@ func (v *view) frame(w, h int, dt float64) string {
 	right := fmt.Sprintf("%s · seq %d · %d events", v.link, v.seq, v.events)
 	c.put(w-len([]rune(right))-2, 0, right, linkCol, false)
 	x := 1
+	plain := v.ov == nil
+	if !plain {
+		line := headerLine(v.ov.snapshot(), w-2)
+		c.put(1, 1, line, rgb{200, 206, 222}, false)
+		if i := strings.Index(line, "HELD "); i >= 0 {
+			badge := line[i:]
+			if j := strings.Index(badge, " "); j >= 0 {
+				if k := strings.Index(badge[j+1:], " "); k >= 0 {
+					badge = badge[:j+1+k]
+				}
+			}
+			c.put(1+len([]rune(line[:i])), 1, badge, rgb{235, 64, 52}, true)
+		}
+	}
 	for _, s := range []struct {
 		k, g string
 		col  rgb
@@ -549,6 +564,9 @@ func (v *view) frame(w, h int, dt float64) string {
 		{"done", "●", rgb{64, 196, 160}}, {"running", "◐", thermal(0.8)}, {"ready", "◎", rgb{200, 206, 222}},
 		{"waiting", "○", rgb{120, 126, 146}}, {"failed", "◉", rgb{235, 64, 52}}, {"needs_review", "◈", rgb{250, 190, 60}},
 	} {
+		if !plain {
+			break
+		}
 		label := fmt.Sprintf("%s %d %s", s.g, counts[s.k], s.k)
 		c.put(x, 1, label, s.col, false)
 		x += len([]rune(label)) + 3
