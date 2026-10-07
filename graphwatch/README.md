@@ -37,6 +37,7 @@ cells are written each frame.
 | `--fps` | 15 | frames per second (only changed cells are sent) |
 | `--motion` | events | `events`: motion follows graph events and a quiet graph stops drawing; `continuous`: running nodes pulse |
 | `--layout` | layers | `layers` or `mycelium` |
+| `--no-overlays` | false | plain header: drop the epoch, work_state counts, review holds, recruiting demand and stream cursor |
 | `--base` | `$GRAPH_BASE_URL` or `https://api.instruxi.dev` | API origin |
 
 ## Auth
