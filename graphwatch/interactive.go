@@ -247,6 +247,10 @@ func parseKeys(b []byte) []string {
 					out = append(out, "up")
 				case 'B':
 					out = append(out, "down")
+				case 'C':
+					out = append(out, "right")
+				case 'D':
+					out = append(out, "left")
 				}
 				i += 2
 			} else {

@@ -158,6 +158,17 @@ func watchLoop(ctx context.Context, cancel context.CancelFunc, c *client, g apiG
 		}
 	}, v.setLink)
 
+	// The inspector reads its own keys when no picker feeds them.
+	v.insp = newInspector()
+	startInspector(ctx, c, *graphID, v)
+	picker := keys != nil
+	if keys == nil {
+		if undo, err := sttyRaw(); err == nil {
+			defer undo()
+			keys = readKeys(ctx, os.Stdin)
+		}
+	}
+
 	var wg sync.WaitGroup
 	if d != nil {
 		finished := func() bool { _, ok := v.completed(); return ok && d.planned.Load() }
@@ -187,8 +198,11 @@ loop:
 		case <-ctx.Done():
 			break loop
 		case k := <-keys:
+			if k != "q" && k != "ctrl-c" && v.insp.key(k) {
+				continue
+			}
 			if k == "q" || k == "esc" || k == "ctrl-c" {
-				back = keys != nil && k != "ctrl-c"
+				back = picker && k != "ctrl-c"
 				break loop
 			}
 		case <-sizeT.C:
