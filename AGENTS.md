@@ -60,6 +60,9 @@ and say so in the commit.
    per frame was measured growing a terminal's memory by about 0.3 GB a minute.
 8. **Never commit a key, a token or a transcript.** `.npmrc` reads `GITHUB_TOKEN`
    from the environment at install time and is committed without a value.
+9. **Navigation commands are read-only.** Every `graphwatch` command other than
+   `--demo` issues GET only; each lives in `graphwatch/cmd_<name>.go` and
+   registers itself from `init()`.
 
 ## Credentials
 
