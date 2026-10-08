@@ -175,6 +175,17 @@ holding `enforcer:graph-graph-import.write` is enough; it does not need
 
 ## Tests
 
-`go test ./...` runs unit tests and golden tests that pin the layered layout and
-the mycelium growth byte for byte. Growth uses no clock and no randomness, so a
-changed golden means a changed model: regenerate it on purpose.
+`go test ./...` runs unit tests and golden tests. The golden files are plain
+text under `graphwatch/testdata/` and are compared in full; a failure prints the
+first differing lines.
+
+- `layers_frames.txt`: four frames (the first, the two around a status change,
+  and the last of 90) of the layered layout.
+- `mycelium_mid.txt`, `mycelium_settled.txt`: the fixed demo plan at 100x36,
+  mid-growth and settled, with the travelling particles removed because their
+  speeds vary from run to run. Growth itself uses no clock and no randomness.
+
+A changed golden means a changed drawing. If that is intended, regenerate on
+purpose and review the diff:
+
+    go test ./... -run GoldenPinned -update
