@@ -33,7 +33,7 @@ type demo struct {
 // create makes the demo graph, with its first node, through POST /graphs/import
 // rather than POST /graphs. An OAuth sign-in (GRAPH_AUTH_HELPER) carries
 // enforcer:graph-graph-import.write and may not carry graph-graphs.write
-// (enforcer-digital-ocean, enforcer_oauth_default_scopes). Who a plan is shared
+// (the sign-in must include the graph-graph-import.write scope). Who a plan is shared
 // with is the separate graph-sharing.write, an access decision the platform
 // leaves to a person. Import creates the graph and its nodes in one transaction under the
 // narrower scope, and works the same with an API key.

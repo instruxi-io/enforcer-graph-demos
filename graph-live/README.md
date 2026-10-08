@@ -8,9 +8,8 @@ fetch or SSE code. Reads go through generated hooks and functions
 (`useGetGraph`, `useGetGraphSummary`, `queryNodes`, `listEdges`,
 `useListGraphs`, and for the drawer `useGetNode`, `useListNodeRuns` and
 `useListNodeObservations`). The demo driver's writes go through generated
-functions too. It's the browser sibling of `cmd/graphwatch`. The full version,
-with every panel, is the Live view in enforcer-v3-portal; this page stays small
-on purpose.
+functions too. It's the browser sibling of `../graphwatch`. It stays small
+on purpose: it draws the graph and drives demos, with no other panels.
 
 ```bash
 export GRAPH_API_KEY=<your Enforcer API key>

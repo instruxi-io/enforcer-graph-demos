@@ -1,4 +1,4 @@
-// Epochs: a loop is RUNS scaled to a graph, never an edge (GRAPH.md). A small
+// Epochs: a loop is RUNS scaled to a graph, never an edge: a graph has no cycles. A small
 // pipeline runs to completion, then POST /graphs/{id}/reset starts it over in
 // place as the next epoch — every node back to active, every run kept as
 // history — three times. The header shows the epoch.

@@ -175,7 +175,7 @@ func (c *client) edges(ctx context.Context, id string) ([]apiEdge, error) {
 	return page[apiEdge](ctx, c, "/graphs/"+id+"/edges")
 }
 
-// sseEvent is one frame of docs/STREAM_CONTRACT.md §3.
+// sseEvent is one frame of the activity stream: an event name, an id and a thin JSON payload.
 type sseEvent struct {
 	Event, ID string
 	Data      json.RawMessage

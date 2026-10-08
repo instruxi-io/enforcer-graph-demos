@@ -5,7 +5,7 @@ import { HttpError } from "@instruxi-io/graph-hooks";
 
 /**
  * The generated functions resolve to the response BODY, though their types
- * describe an envelope around it (enforcer-hooks README, "Response shape").
+ * describe an envelope around it that the server does not send.
  * One cast, here, so call sites read the body as what it is.
  */
 export const body = <T,>(r: unknown): T | undefined => r as T | undefined;
@@ -103,7 +103,7 @@ export type ApiEdge = { from_node_id: string; to_node_id: string; type: string }
 export type ApiGraph = {
   id: string; slug: string; name: string; dependency_edge_type: string; mode?: string; epoch?: number;
 };
-/** The subset of GET /graphs/{id}/summary this page reads (WORK_LOBBY_CONTRACT §4). */
+/** The subset of GET /graphs/{id}/summary this page reads (counts, and the lists of reclaimable and clock-gated nodes). */
 export type ApiSummary = {
   state?: string;
   epoch?: number;

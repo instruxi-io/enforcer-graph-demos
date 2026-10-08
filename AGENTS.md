@@ -1,4 +1,4 @@
-# AGENTS.md — working in enforcer-graph-demos
+# AGENTS.md: working in enforcer-graph-demos
 
 One page. Read it once, then work.
 
@@ -7,11 +7,11 @@ One page. Read it once, then work.
 Two viewers for a plan held in Enforcer Graph, extracted from the service's own
 tree so they can be read, run and changed without the service:
 
-- `graphwatch/` — a terminal viewer in Go. Standard library only, on purpose.
+- `graphwatch/`: a terminal viewer in Go. Standard library only, on purpose.
   `go run . --demo --layout mycelium` is an offline demo that needs no API and
   no key; `--graph <id>` watches a real graph; `--demo` alone creates and works
   one in your workspace.
-- `graph-live/` — a browser viewer in React. Watch mode reads and listens and
+- `graph-live/`: a browser viewer in React. Watch mode reads and listens and
   never writes. Demo mode creates a `demo-<scenario>-<time>` graph and drives
   it through the API as a set of harnesses would.
 
@@ -66,11 +66,11 @@ and say so in the commit.
 
 ## Credentials
 
-- `GRAPH_API_KEY` — an Enforcer API key. Both viewers accept it.
-- `GRAPH_AUTH_HELPER` — `graphwatch` only: a command that prints a JSON object
+- `GRAPH_API_KEY`: an Enforcer API key. Both viewers accept it.
+- `GRAPH_AUTH_HELPER`: `graphwatch` only: a command that prints a JSON object
   of request headers. Pointing it at the `enforcer` Claude Code plugin's header
   helper lets the viewer ride the plugin's OAuth sign-in and refresh on a 401.
-- `GRAPH_BASE_URL` — the API origin, default `https://api.instruxi.dev`.
+- `GRAPH_BASE_URL`: the API origin, default `https://api.instruxi.dev`.
 
 A key or sign-in with only `enforcer:read` is enough to watch. Demo mode also
 needs `enforcer:graph-graph-import.write` (graphwatch creates its demo graph
@@ -92,7 +92,6 @@ write scopes (graph-live's driver claims, heartbeats and completes runs).
 
 - The `enforcer` Claude Code plugin, install and sign-in:
   https://github.com/instruxi-io/claude-plugins
-- The graph service, its contracts and the hook packages are private to the
-  organisation. If you are working for Instruxi, read the service's `GRAPH.md`
-  first; the two conventions above (edge direction, loops are runs not edges)
-  come from there.
+- The graph service and the hook packages are private to the organisation. The
+  two conventions that matter here: a `requires` edge points from the dependent
+  to its prerequisite, and a loop is a set of runs, never an edge.
