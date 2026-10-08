@@ -30,9 +30,11 @@ cd graph-live && GITHUB_TOKEN=$(gh auth token) npm ci && npm run typecheck && np
 real API and adds the key there, so the key never reaches the bundle or the
 browser. Do not move the key into client code.
 
-The golden tests under `graphwatch/` pin the layered layout and the mycelium
-growth byte for byte. Growth is seeded from node ids with no clock and no
-randomness; if you change the growth model, regenerate the goldens on purpose
+The golden tests under `graphwatch/` compare the layered layout (four frames)
+and the mycelium demo frames (mid-growth and settled, particles removed) against
+text files in `graphwatch/testdata/`. Growth is seeded from node ids with no clock and no
+randomness; if you change what is drawn, regenerate the goldens on purpose
+(`go test ./... -run GoldenPinned -update`)
 and say so in the commit.
 
 ## Rules that are not obvious
