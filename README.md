@@ -1,13 +1,13 @@
 # enforcer-graph demos
 
-Two small viewers for a plan held in [Enforcer Graph](https://github.com/instruxi-io/claude-plugins):
+Two small viewers for a plan held in [Enforcer Graph](https://gvnr.io/graphwatch):
 a tenant-scoped DAG service where agents claim nodes, do the work, and have each
 completion judged against acceptance criteria before anything downstream unblocks.
 
 | directory | what it is | needs an account? |
 |---|---|---|
 | [`graphwatch/`](./graphwatch) | A terminal viewer. Draws a graph as layered dots (or as a growing mycelium), animated from the graph's event stream. Go, standard library only. | No for the offline mycelium demo; yes to watch or demo a real graph |
-| [`graph-live/`](./graph-live) | A browser viewer. The same picture in React, plus a demo mode that creates a graph and works it the way a set of harnesses would. The minimal reference for the published `@instruxi-io/graph-hooks`. | Yes |
+| [`graph-live/`](./graph-live) | A browser viewer. The same picture in React, plus a demo mode that creates a graph and works it the way a set of harnesses would. The minimal reference for `@instruxi-io/graph-hooks`. | Yes |
 
 ## graphwatch commands
 

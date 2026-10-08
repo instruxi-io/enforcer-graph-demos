@@ -1,8 +1,8 @@
 // Validation with the one identity this page has. A person or agent judge can
 // never vote on a run it worked (self_judgment_forbidden), and here every run
 // is worked by the same account, so the only judge that can sit is Jev: a
-// 1-of-1 quorum, `judges.scope: none, jev: true` (VALIDATION_CONTRACT §3,
-// "Jev decides, dependents wait"). Each completion carries evidence; Jev
+// 1-of-1 quorum, `judges.scope: none, jev: true` (dependents wait
+// until Jev decides). Each completion carries evidence; Jev
 // judges it asynchronously, so nodes show looking_for_validation before they
 // finish. One job reports a failing check on its first attempt: Jev rejects
 // it, the node goes back to looking_for_work, and the retry passes.

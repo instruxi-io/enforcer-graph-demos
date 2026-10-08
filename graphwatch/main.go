@@ -4,14 +4,14 @@
 // downward, and work shows as heat — pulses flow down an edge into a node when
 // it starts and out of it when it finishes, and everything cools when idle.
 //
-//	GRAPH_AUTH_HELPER='node …/enforcer/<v>/bin/enforcer-headers.mjs' go run ./cmd/graphwatch --graph <id>
-//	GRAPH_API_KEY=… go run ./cmd/graphwatch --graph <id>
-//	GRAPH_API_KEY=… go run ./cmd/graphwatch --demo          # grow a plan and work it
-//	go run ./cmd/graphwatch --demo --layout mycelium         # offline: a colony grows, no API needed
+//	GRAPH_AUTH_HELPER='node …/enforcer/<v>/bin/enforcer-headers.mjs' go run . --graph <id>
+//	GRAPH_API_KEY=… go run . --graph <id>
+//	GRAPH_API_KEY=… go run . --demo          # grow a plan and work it
+//	go run . --demo --layout mycelium         # offline: a colony grows, no API needed
 //
 // GRAPH_AUTH_HELPER (preferred) runs a command that prints the auth headers as
-// JSON — the Enforcer plugin's OAuth session from /enforcer:login, refreshed as
-// it expires — and wins over GRAPH_API_KEY when both are set.
+// JSON (the Enforcer plugin's OAuth session from /enforcer:login, refreshed as
+// it expires) and wins over GRAPH_API_KEY when both are set.
 //
 // It reads with the ordinary endpoints (/nodes, /edges) and only uses the
 // stream as its clock: every event means "refetch", exactly as a browser would.

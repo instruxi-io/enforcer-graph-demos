@@ -15,7 +15,7 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [react()],
     // hooks-shared holds the configure() registry and must be ONE instance
-    // (enforcer-hooks README); React and TanStack Query likewise.
+    // (two copies would each hold their own configuration); React and TanStack Query likewise.
     resolve: { dedupe: ["react", "react-dom", "@tanstack/react-query", "@instruxi-io/hooks-shared"] },
     server: {
       port: 5178,

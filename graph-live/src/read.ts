@@ -1,12 +1,12 @@
 // Reading a WHOLE graph, however large, through the generated functions.
 //
 // Nodes come from GET /nodes/query (queryNodes), because it is the list that
-// pages with an opaque keyset cursor (#157): pass each page's `next` back as
+// pages with an opaque keyset cursor: pass each page's `next` back as
 // `after` until there is none. Keyset paging is exact under concurrent writes,
 // which offset paging is not (a row inserted before the offset shifts every
 // later page by one). Sorted by created_at, which never changes, so a node
 // updated mid-read cannot jump pages. Each item carries the server's
-// work_state, reclaimable and opens_at (WORK_LOBBY_CONTRACT §2).
+// work_state, reclaimable and opens_at.
 //
 // Edges have no cursor list, so they page by offset against meta.total.
 import { listEdges, queryNodes } from "@instruxi-io/graph-hooks";

@@ -136,7 +136,7 @@ export function SyncBadge({ live, graphId, isDag, stream }: {
           {r.missingLeases > 0 && (
             <div className="sync-list warn">
               <h5>no lease ({r.missingLeases})</h5>
-              <div>running with no lease at all: never reclaimed, a silent stall (WORK_LOBBY_CONTRACT §1a).</div>
+              <div>running with no lease at all: never reclaimed, a silent stall.</div>
             </div>
           )}
           {r.escalated > 0 && (

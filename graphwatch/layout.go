@@ -3,8 +3,9 @@ package main
 import "sort"
 
 // gnode is one node as the view knows it. Prereqs are the nodes it depends on:
-// stored edges point FROM the dependent TO its prerequisite (GRAPH.md), and the
-// view draws them the other way round — a prerequisite sits ABOVE what it
+// stored edges point FROM the dependent TO its prerequisite (a `requires` edge reads
+// "dependent needs prerequisite"), and the
+// view draws them the other way round: a prerequisite sits ABOVE what it
 // unblocks, so work falls down the screen and the DAG fans out as it goes.
 type gnode struct {
 	id, key, status string
