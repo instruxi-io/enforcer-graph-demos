@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // Exit codes every command returns.
@@ -59,7 +60,15 @@ func register(name, summary string, run func(ctx context.Context, env *cliEnv, a
 
 func init() {
 	register("help", "list commands, or describe one: help <command>", nil)
+	register("version", "print the version: version (also --version)", nil)
 }
+
+// version is set at build time: go build -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
+// credSource names where the credential came from, for the 401 message. It is
+// a label such as GRAPH_API_KEY, never the secret.
+var credSource = "unknown"
 
 func sortedCommands() []command {
 	out := make([]command, 0, len(commands))
@@ -76,9 +85,22 @@ func dispatch(args []string, stdout, stderr io.Writer) (code int, handled bool) 
 	if len(args) == 0 {
 		return 0, false
 	}
+	if args[0] == "--version" || args[0] == "-version" {
+		fmt.Fprintln(stdout, "graphwatch", version)
+		return exitOK, true
+	}
 	cmd, ok := commands[args[0]]
 	if !ok {
-		return 0, false
+		if strings.HasPrefix(args[0], "-") {
+			return 0, false // a watch flag: the default command
+		}
+		fmt.Fprintf(stderr, "graphwatch: unknown command %q\n\n", args[0])
+		runHelp(nil, stderr, stderr)
+		return exitUsage, true
+	}
+	if cmd.name == "version" {
+		fmt.Fprintln(stdout, "graphwatch", version)
+		return exitOK, true
 	}
 	if cmd.name == "help" {
 		return runHelp(args[1:], stdout, stderr), true
@@ -95,6 +117,7 @@ type globalFlags struct {
 	limit   *int
 	noColor *bool
 	keyFile *string
+	timeout *time.Duration
 }
 
 func newGlobalFlags(fs *flag.FlagSet) globalFlags {
@@ -104,7 +127,15 @@ func newGlobalFlags(fs *flag.FlagSet) globalFlags {
 		json:    fs.Bool("json", false, "print the API's data payload as JSON"),
 		limit:   fs.Int("limit", 0, "show at most this many rows (0: all)"),
 		noColor: fs.Bool("no-color", false, "no colour (NO_COLOR is also respected)"),
+		timeout: fs.Duration("timeout", defaultTimeout, "per-request timeout (a stalled connection is reported after this long)"),
 	}
+}
+
+// flagSet reports whether a bool flag declared through commandFlags was set on
+// the shared flag set (before the positional arguments).
+func flagSet(env *cliEnv, name string) bool {
+	f := env.fs.Lookup(name)
+	return f != nil && f.Value.String() == "true"
 }
 
 func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr io.Writer) int {
@@ -120,6 +151,10 @@ func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr 
 		}
 		return exitUsage
 	}
+	if *g.timeout <= 0 {
+		fmt.Fprintln(stderr, "graphwatch: --timeout must be positive")
+		return exitUsage
+	}
 	if *g.limit < 0 {
 		fmt.Fprintln(stderr, "graphwatch: --limit must be 0 or more")
 		return exitUsage
@@ -129,7 +164,10 @@ func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr 
 		fmt.Fprintln(stderr, strings.TrimPrefix(err.Error(), "graphwatch: "))
 		return exitUsage
 	}
-	env := &cliEnv{client: newClient(base, cred), base: base, source: source, out: stdout, errOut: stderr,
+	credSource = source
+	cl := newClient(base, cred)
+	cl.http.Timeout, cl.slowNote = *g.timeout, stderr
+	env := &cliEnv{client: cl, base: base, source: source, out: stdout, errOut: stderr,
 		json: *g.json, limit: *g.limit, noColor: *g.noColor, isTTY: isTerminal(stdout), fs: fs}
 	return cmd.run(ctx, env, fs.Args())
 }
@@ -158,7 +196,7 @@ func runHelp(args []string, stdout, stderr io.Writer) int {
 	for _, c := range sortedCommands() {
 		fmt.Fprintf(stdout, "  %-12s %s\n", c.name, c.summary)
 	}
-	fmt.Fprintln(stdout, "\nglobal flags: --base <url>  --json  --limit <n>  --no-color  --api-key-file <path>")
+	fmt.Fprintln(stdout, "\nglobal flags: --base <url>  --json  --limit <n>  --no-color  --api-key-file <path>  --timeout <duration>")
 	return exitOK
 }
 
@@ -167,6 +205,10 @@ func runHelp(args []string, stdout, stderr io.Writer) int {
 // so no header value can leak. It returns the exit code.
 func reportError(w io.Writer, err error) int {
 	var ae *apiError
+	if errors.As(err, &ae) && ae.status == 401 {
+		fmt.Fprintf(w, "graphwatch: signed out or key rejected (credential source: %s): %s\n", credSource, signedOutFix(credSource))
+		return exitRuntime
+	}
 	if errors.As(err, &ae) && ae.status != 0 {
 		code, msg := ae.code, ae.detail
 		if code == "" {

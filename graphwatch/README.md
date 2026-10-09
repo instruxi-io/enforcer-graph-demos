@@ -33,35 +33,48 @@ cells are written each frame.
 | `--demo` | false | create a graph, grow it and work it while watching; with `--layout mycelium` an offline demo that needs no API |
 | `--size` | 36 | demo: nodes to plan |
 | `--workers` | 4 | demo: concurrent harnesses |
+| `--fail` | 0.08 | demo: chance a run fails and is retried |
 | `--stay` | false | keep watching after the plan completes |
 | `--fps` | 15 | frames per second (only changed cells are sent) |
 | `--motion` | events | `events`: motion follows graph events and a quiet graph stops drawing; `continuous`: running nodes pulse |
 | `--layout` | layers | `layers` or `mycelium` |
 | `--no-overlays` | false | plain header: drop the epoch, work_state counts, review holds, recruiting demand and stream cursor |
 | `--base` | `$GRAPH_BASE_URL` or `https://api.instruxi.dev` | API origin |
+| `--api-key-file` | | read the API key from this file |
+| `--timeout` | 10s | per-request timeout; a request still waiting after 3 s prints `connecting to <host>...` to stderr |
+| `--no-color` | false | accepted, but the watch view needs colour: it prints a one-line message and exits 2 (so does `NO_COLOR`) |
+| `--json`, `--limit` | | table commands only; the watch view rejects them |
+
+The watch view draws on a terminal of at least 80x24. On a smaller one, with
+stdout redirected, with `NO_COLOR` set or with `TERM=dumb` it prints one line to
+stderr and exits 2 instead of drawing. `graphwatch --version` (or `graphwatch
+version`) prints the version; a release build sets it with
+`-ldflags "-X main.version=<version>"`, and a plain build prints `dev`. An
+unknown first word, such as `graphwatch bogus`, prints the command list and
+exits 2.
 
 ## Commands
 
 `graphwatch` with no arguments opens the picker; `graphwatch <command>` runs one
 of the commands below. All of them are read-only (GET only). Global flags:
-`--base <url>  --json  --limit <n>  --no-color  --api-key-file <path>`. Put
+`--base <url>  --json  --limit <n>  --no-color  --api-key-file <path>  --timeout <duration>`. Put
 flags before the positional arguments (`graphwatch nodes --json <graph>`).
 `graphwatch help <command>` lists a command's flags.
 
 | command | what it does | worked example |
 |---|---|---|
 | `graphwatch whoami` | the account, tenant and role the API resolves, and where the credential came from | `graphwatch whoami` |
-| `graphwatch graphs` | list the graphs you can see, or `graphs show <id\|slug>` for one with its roll-up | `graphwatch graphs` |
+| `graphwatch graphs` | list the graphs you can see (`--archived` includes archived ones), or `graphs show <id\|slug>` for one with its roll-up | `graphwatch graphs` |
 | `graphwatch nodes` | list a graph's tasks (`--status`, `--type`), or `nodes show <graph> <key\|id>` with its runs | `graphwatch nodes --status active <graph>` |
 | `graphwatch edges` | list a graph's dependencies; `--as-flow` prints prerequisite to dependent | `graphwatch edges --as-flow <graph>` |
-| `graphwatch runs` | a node's runs and how they were judged; `runs show <graph> <node> <run> [--full]` | `graphwatch runs <graph> <node>` |
+| `graphwatch runs` | a node's runs and how they were judged; `runs show <graph> <node> <run>` (`--full` prints evidence in full) | `graphwatch runs <graph> <node>` |
 | `graphwatch review` | human review items holding a graph (`--open`, `--all`); `review show <graph> <item>` | `graphwatch review <graph>` |
 | `graphwatch epochs` | replay history; `epochs show <graph> <epoch>` | `graphwatch epochs <graph>` |
 | `graphwatch access` | who can reach a graph (`--full-ids`) | `graphwatch access <graph>` |
 | `graphwatch recruiting` | what one graph recruits for | `graphwatch recruiting <graph>` |
-| `graphwatch work` | the work lobby: graphs looking for workers or validation (`--state`, `--kind`, `--graph`, `--watch secs`) | `graphwatch work --kind work` |
+| `graphwatch work` | the work lobby: graphs looking for workers or validation (`--state`, `--kind`, `--tier`, `--for`, `--graph`, `--watch`, seconds between polls, minimum 5) | `graphwatch work --kind work` |
 | `graphwatch query` | query nodes or runs across every graph you can see; `--all` follows `next` | `graphwatch query nodes --all` |
-| `graphwatch tail` | follow a graph's event stream as text; `--save-cursor` resumes next run | `graphwatch tail --save-cursor <graph>` |
+| `graphwatch tail` | follow a graph's event stream as text; `--cursor` resumes from a cursor, `--save-cursor` resumes next run | `graphwatch tail --save-cursor <graph>` |
 | `graphwatch help` | list commands, or describe one | `graphwatch help runs` |
 
 Output below is copied from a real run against a local fake API (ids shortened,
@@ -96,6 +109,51 @@ labels it "depends on", and `--as-flow` flips it for reading.
 `runs`, `review`, `epochs`, `access`, `recruiting`, `work`, `query` and `tail`
 follow the same pattern: `graphwatch help <command>` gives the exact flags, and
 each prints a table and accepts `--json`.
+
+### `query` flags
+
+Each filter is sent to the server as the query parameter of the same name
+(dashes for underscores); the server rejects one it does not know for that
+kind. `graphwatch help query` gives each flag's meaning.
+
+| flag | filters |
+|---|---|
+| `--graph-id` | only this graph (id) |
+| `--status` | node or run status, e.g. active or done |
+| `--type` | node type |
+| `--key` | node key (exact match) |
+| `--q` | free-text search over node titles and keys |
+| `--epoch` | only this epoch number |
+| `--assignee` | nodes assigned to this account |
+| `--assignee-group` | nodes assigned to this group |
+| `--claimer` | runs claimed by this account |
+| `--runner` | runs recorded under this runner label |
+| `--verdict` | runs with this verification verdict (e.g. verified, rejected) |
+| `--waiting` | nodes waiting on this condition (e.g. judges or a human) |
+| `--link-system` | nodes linked to this external system |
+| `--link-role` | nodes whose link has this role |
+| `--has-output` | nodes that declare or hold this output name |
+| `--from` | only rows at or after this time (RFC 3339) |
+| `--to` | only rows before this time (RFC 3339) |
+| `--time-field` | which timestamp --from and --to apply to |
+| `--include-archived` | true to include archived graphs |
+| `--work-state` | the server's work_state, e.g. looking_for_work |
+| `--sort` | sort field, with a leading minus for descending |
+| `--group-by` | group rows by this field and print counts instead of rows |
+| `--agg` | aggregate to compute per group, e.g. count or avg:field |
+| `--tz` | time zone for time bucketing, e.g. UTC |
+| `--offset` | skip this many rows (grouped results page by offset) |
+| `--after` | resume after this page cursor |
+| `--node-id` | runs of this node (id) |
+| `--node-key` | runs of the node with this key |
+| `--node-type` | runs of nodes of this type |
+| `--attempt` | runs with this attempt number |
+| `--verdict-resolution` | how the verdict was resolved, e.g. judge, vote or human |
+| `--min-duration-seconds` | runs that took at least this many seconds |
+| `--max-duration-seconds` | runs that took at most this many seconds |
+| `--has-evidence` | true for runs that carry evidence |
+| `--where` | predicate `path:op:value`, repeatable and ANDed |
+| `--all` | follow the next-page cursor until exhausted, bounded by `--limit` (default 200) |
 
 ### `--json` piping
 

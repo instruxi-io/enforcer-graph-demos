@@ -28,6 +28,45 @@ var queryParams = []string{
 	"verdict_resolution", "min_duration_seconds", "max_duration_seconds", "has_evidence",
 }
 
+// queryParamHelp is the one-line meaning of each parameter, so `help query`
+// says what a flag filters instead of repeating its name.
+var queryParamHelp = map[string]string{
+	"graph_id":             "only this graph (id)",
+	"status":               "node or run status, e.g. active or done",
+	"type":                 "node type",
+	"key":                  "node key (exact match)",
+	"q":                    "free-text search over node titles and keys",
+	"epoch":                "only this epoch number",
+	"assignee":             "nodes assigned to this account",
+	"assignee_group":       "nodes assigned to this group",
+	"claimer":              "runs claimed by this account",
+	"runner":               "runs recorded under this runner label",
+	"verdict":              "runs with this verification verdict (e.g. verified, rejected)",
+	"waiting":              "nodes waiting on this condition (e.g. judges or a human)",
+	"link_system":          "nodes linked to this external system",
+	"link_role":            "nodes whose link has this role",
+	"has_output":           "nodes that declare or hold this output name",
+	"from":                 "only rows at or after this time (RFC 3339)",
+	"to":                   "only rows before this time (RFC 3339)",
+	"time_field":           "which timestamp --from and --to apply to",
+	"include_archived":     "true to include archived graphs",
+	"work_state":           "the server's work_state, e.g. looking_for_work",
+	"sort":                 "sort field, with a leading minus for descending",
+	"group_by":             "group rows by this field and print counts instead of rows",
+	"agg":                  "aggregate to compute per group, e.g. count or avg:field",
+	"tz":                   "time zone for time bucketing, e.g. UTC",
+	"offset":               "skip this many rows (grouped results page by offset)",
+	"after":                "resume after this page cursor",
+	"node_id":              "runs of this node (id)",
+	"node_key":             "runs of the node with this key",
+	"node_type":            "runs of nodes of this type",
+	"attempt":              "runs with this attempt number",
+	"verdict_resolution":   "how the verdict was resolved, e.g. judge, vote or human",
+	"min_duration_seconds": "runs that took at least this many seconds",
+	"max_duration_seconds": "runs that took at most this many seconds",
+	"has_evidence":         "true for runs that carry evidence",
+}
+
 // whereFlag collects repeated --where path:op:value predicates.
 type whereFlag []map[string]any
 
@@ -76,10 +115,10 @@ var queryWhere whereFlag
 func queryFlags(fs *flag.FlagSet) {
 	queryWhere = nil
 	for _, p := range queryParams {
-		fs.String(strings.ReplaceAll(p, "_", "-"), "", "query parameter "+p)
+		fs.String(strings.ReplaceAll(p, "_", "-"), "", queryParamHelp[p])
 	}
 	fs.Var(&queryWhere, "where", "predicate path:op:value, repeatable (ANDed), e.g. data.tier:eq:deep")
-	fs.Bool("all", false, "follow `next` until exhausted, bounded by --limit (default 200)")
+	fs.Bool("all", false, "follow the next-page cursor until exhausted, bounded by --limit (default 200)")
 }
 
 func runQuery(ctx context.Context, env *cliEnv, args []string) int {

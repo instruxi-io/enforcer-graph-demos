@@ -49,6 +49,15 @@ func age(t time.Time) string {
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
+func init() {
+	// Declared on the shared set so `help review` lists them; runReview parses
+	// them again because they may follow the graph argument.
+	commandFlags["review"] = func(fs *flag.FlagSet) {
+		fs.Bool("open", false, "only open items (the default)")
+		fs.Bool("all", false, "open and resolved items")
+	}
+}
+
 func runReview(ctx context.Context, env *cliEnv, args []string) int {
 	if len(args) > 0 && args[0] == "show" {
 		return runReviewShow(ctx, env, args[1:])
@@ -69,6 +78,7 @@ func runReview(ctx context.Context, env *cliEnv, args []string) int {
 			args = args[1:]
 		}
 	}
+	*open, *all = *open || flagSet(env, "open"), *all || flagSet(env, "all")
 	if len(pos) != 1 || (*open && *all) {
 		fmt.Fprintln(env.errOut, reviewUsage)
 		return exitUsage

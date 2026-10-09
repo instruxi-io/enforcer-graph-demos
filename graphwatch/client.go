@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,11 +20,22 @@ type client struct {
 	base string // …/api/v1/graph
 	cred credential
 	http *http.Client
+	// slowNote, when set, hears "connecting to <host>..." if a request is still
+	// waiting after slowAfter, so a black-holed address does not look like a hang.
+	slowNote io.Writer
 }
+
+// defaultTimeout bounds one API request; --timeout raises or lowers it.
+const defaultTimeout = 10 * time.Second
+
+// clientTimeout is what newClient uses; the watch view's --timeout sets it.
+var clientTimeout = defaultTimeout
+
+const slowAfter = 3 * time.Second
 
 func newClient(base string, cred credential) *client {
 	return &client{base: strings.TrimRight(base, "/") + "/api/v1/graph", cred: cred,
-		http: &http.Client{Timeout: 30 * time.Second}}
+		http: &http.Client{Timeout: clientTimeout}}
 }
 
 // authorize sets the credential's headers on req; fresh re-reads them (after a
@@ -65,7 +77,9 @@ func (c *client) do(ctx context.Context, method, path string, body, out any) err
 			return &apiError{status: http.StatusUnauthorized, msg: err.Error()}
 		}
 		req.Header.Set("Content-Type", "application/json")
+		stop := c.noteIfSlow()
 		resp, err = c.http.Do(req)
+		stop()
 		if err != nil {
 			return &apiError{msg: fmt.Sprintf("%s %s: %v", method, path, err)}
 		}
@@ -219,4 +233,17 @@ func parseSSE(r io.Reader, fn func(sseEvent)) error {
 // stream holds the SSE connection open from live; see streamFrom.
 func (c *client) stream(ctx context.Context, graphID string, fn func(sseEvent), status func(string)) {
 	c.streamFrom(ctx, graphID, "", fn, status)
+}
+
+// noteIfSlow starts the "connecting to" timer and returns what stops it.
+func (c *client) noteIfSlow() (stop func()) {
+	if c.slowNote == nil {
+		return func() {}
+	}
+	host := c.base
+	if u, err := url.Parse(c.base); err == nil && u.Host != "" {
+		host = u.Host
+	}
+	t := time.AfterFunc(slowAfter, func() { fmt.Fprintf(c.slowNote, "connecting to %s...\n", host) })
+	return func() { t.Stop() }
 }

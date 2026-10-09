@@ -65,6 +65,14 @@ func (r apiRun) heldNote() string {
 	return "HELD " + strings.Join(why, "; ")
 }
 
+func init() {
+	// Declared on the shared set so `help runs` lists it; `runs show` parses it
+	// again because it may follow the positional arguments.
+	commandFlags["runs"] = func(fs *flag.FlagSet) {
+		fs.Bool("full", false, "runs show: print evidence output in full")
+	}
+}
+
 func runRuns(ctx context.Context, env *cliEnv, args []string) int {
 	if len(args) > 0 && args[0] == "show" {
 		return runRunsShow(ctx, env, args[1:])
@@ -113,6 +121,7 @@ func runRunsShow(ctx context.Context, env *cliEnv, args []string) int {
 			args = args[1:]
 		}
 	}
+	*full = *full || flagSet(env, "full")
 	if len(pos) != 3 {
 		fmt.Fprintln(env.errOut, runsUsage)
 		return exitUsage
