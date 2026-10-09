@@ -40,24 +40,71 @@ func main() {
 	watchMain()
 }
 
+// watchFlags holds the bare-flag form's options. They are defined on a flag set
+// passed in so a test can list them against the help and the README.
+type watchFlags struct {
+	base, keyFile, graphID, motion, layout *string
+	demoMode, stay, json, noColor          *bool
+	size, workers, fps, limit              *int
+	failRate                               *float64
+	timeout                                *time.Duration
+}
+
+func defineWatchFlags(fs *flag.FlagSet) *watchFlags {
+	o := &watchFlags{}
+	o.base = fs.String("base", "", "api origin (default: GRAPH_BASE_URL, the plugin's saved base_url, then https://api.instruxi.dev)")
+	o.keyFile = fs.String("api-key-file", "", "read the API key from this file (first in the credential order)")
+	o.graphID = fs.String("graph", "", "graph id to watch")
+	o.demoMode = fs.Bool("demo", false, "create a graph, grow it and work it while watching; with --layout mycelium, an offline demo that needs no API")
+	o.size = fs.Int("size", 36, "demo: nodes to plan")
+	o.workers = fs.Int("workers", 4, "demo: concurrent harnesses")
+	o.failRate = fs.Float64("fail", 0.08, "demo: chance a run fails (and is retried)")
+	o.stay = fs.Bool("stay", false, "keep watching after the plan completes")
+	o.fps = fs.Int("fps", 15, "frames per second (only changed cells are sent)")
+	o.motion = fs.String("motion", "events", "events: motion follows graph events and a quiet graph stops drawing; continuous: running nodes pulse and stream particles every frame")
+	o.layout = fs.String("layout", "layers", "layers: top-to-bottom layers; mycelium: a radial growth view with roots at the centre")
+	fs.BoolVar(&noOverlays, "no-overlays", false, "plain header: no epoch, work_state counts, review holds, recruiting or stream cursor")
+	// The table commands' global flags are accepted so a script can pass one set
+	// of flags to every form; the watch view says what it does with each.
+	o.noColor = fs.Bool("no-color", false, "the watch view needs colour and refuses to draw without it (NO_COLOR is also respected)")
+	o.json = fs.Bool("json", false, "table commands only: rejected by the watch view")
+	o.limit = fs.Int("limit", 0, "table commands only: rejected by the watch view")
+	o.timeout = fs.Duration("timeout", defaultTimeout, "per-request timeout for API calls")
+	return o
+}
+
 // watchMain is the bare-flag form (--graph, --demo): the default command.
 func watchMain() {
-	base := flag.String("base", "", "api origin (default: GRAPH_BASE_URL, the plugin's saved base_url, then https://api.instruxi.dev)")
-	keyFile := flag.String("api-key-file", "", "read the API key from this file (first in the credential order)")
-	graphID := flag.String("graph", "", "graph id to watch")
-	demoMode := flag.Bool("demo", false, "create a graph, grow it and work it while watching; with --layout mycelium, an offline demo that needs no API")
-	size := flag.Int("size", 36, "demo: nodes to plan")
-	workers := flag.Int("workers", 4, "demo: concurrent harnesses")
-	failRate := flag.Float64("fail", 0.08, "demo: chance a run fails (and is retried)")
-	stay := flag.Bool("stay", false, "keep watching after the plan completes")
-	fps := flag.Int("fps", 15, "frames per second (only changed cells are sent)")
-	motion := flag.String("motion", "events", "events: motion follows graph events and a quiet graph stops drawing; continuous: running nodes pulse and stream particles every frame")
-	layout := flag.String("layout", "layers", "layers: top-to-bottom layers; mycelium: a radial growth view with roots at the centre")
-	flag.BoolVar(&noOverlays, "no-overlays", false, "plain header: no epoch, work_state counts, review holds, recruiting or stream cursor")
+	o := defineWatchFlags(flag.CommandLine)
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: graphwatch --graph <id> | --demo [flags]   (watch; the default command)")
+		fmt.Fprintln(os.Stderr, "       graphwatch <command> [flags]               (graphwatch help lists the commands)")
+		fmt.Fprintln(os.Stderr, "\nflags:")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+	base, keyFile, graphID, demoMode, size, workers := o.base, o.keyFile, o.graphID, o.demoMode, o.size, o.workers
+	failRate, stay, fps, motion, layout := o.failRate, o.stay, o.fps, o.motion, o.layout
+	if *o.json || *o.limit != 0 {
+		fmt.Fprintln(os.Stderr, "graphwatch: --json and --limit apply to the table commands, not the watch view (see graphwatch help)")
+		os.Exit(2)
+	}
+	if *o.timeout <= 0 {
+		fmt.Fprintln(os.Stderr, "graphwatch: --timeout must be positive")
+		os.Exit(2)
+	}
+	clientTimeout = *o.timeout
 	if *layout != "layers" && *layout != "mycelium" {
 		fmt.Fprintln(os.Stderr, "graphwatch: --layout must be layers or mycelium")
 		os.Exit(2)
+	}
+	if *graphID == "" && !*demoMode && !isTerminal(os.Stdin) {
+		runHelp(nil, os.Stderr, os.Stderr)
+		os.Exit(exitUsage)
+	}
+	if msg := watchTermProblem(isTerminal(os.Stdout), *o.noColor || os.Getenv("NO_COLOR") != "", os.Getenv("TERM") == "dumb", termSizeRaw); msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		os.Exit(exitUsage)
 	}
 
 	// The mycelium demo needs no graph: it works a plan in-process.
@@ -80,7 +127,8 @@ func watchMain() {
 		os.Exit(runPicker(*keyFile, *base, *fps, *motion == "continuous"))
 	}
 
-	cred, _, baseURL, err := resolveFromProcess(*keyFile, *base)
+	cred, source, baseURL, err := resolveFromProcess(*keyFile, *base)
+	credSource = source
 	if err != nil {
 		fmt.Fprintln(os.Stderr, strings.TrimPrefix(err.Error(), "graphwatch: "))
 		os.Exit(2)
@@ -88,6 +136,7 @@ func watchMain() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	c := newClient(baseURL, cred)
+	c.slowNote = os.Stderr // only until the first read: after that the alternate screen owns the terminal
 	v := newView()
 	v.continuous = *motion == "continuous"
 	if v.mycelium = *layout == "mycelium"; v.mycelium {
@@ -112,6 +161,7 @@ func watchMain() {
 		fmt.Fprintln(os.Stderr, "graphwatch:", err)
 		os.Exit(1)
 	}
+	c.slowNote = nil
 	watchLoop(ctx, cancel, c, g, v, d, *fps, *stay, nil)
 	fmt.Printf("graphwatch: %s (%s)\n", g.Slug, *graphID)
 }
@@ -259,6 +309,47 @@ func termSize() (int, int) {
 		}
 	}
 	return 100, 32
+}
+
+// minCols and minRows are the smallest terminal the watch view draws for.
+const (
+	minCols = 80
+	minRows = 24
+)
+
+// watchTermProblem says why the watch view must not draw, or "" when it may.
+// size reports the terminal's real size and ok=false when it cannot be read, in
+// which case the size check is skipped rather than guessed.
+func watchTermProblem(stdoutTTY, noColor, dumb bool, size func() (w, h int, ok bool)) string {
+	switch {
+	case !stdoutTTY:
+		return "graphwatch: the watch view draws on a terminal and stdout is not one; use a command such as `graphwatch graphs` for text output"
+	case noColor:
+		return "graphwatch: the watch view is drawn in colour and cannot run with NO_COLOR or --no-color; use a command such as `graphwatch graphs --no-color`"
+	case dumb:
+		return "graphwatch: the watch view needs cursor control and TERM=dumb has none; use a command such as `graphwatch graphs`"
+	}
+	if w, h, ok := size(); ok && (w < minCols || h < minRows) {
+		return fmt.Sprintf("graphwatch needs a terminal of at least %dx%d (this one is %dx%d)", minCols, minRows, w, h)
+	}
+	return ""
+}
+
+// termSizeRaw is the terminal's actual size, with no fallback.
+func termSizeRaw() (w, h int, ok bool) {
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, false
+	}
+	f := strings.Fields(string(out))
+	if len(f) != 2 {
+		return 0, 0, false
+	}
+	h, _ = strconv.Atoi(f[0])
+	w, _ = strconv.Atoi(f[1])
+	return w, h, w > 0 && h > 0
 }
 
 func envOr(k, d string) string {

@@ -24,7 +24,7 @@ func init() {
 func workFlags(fs *flag.FlagSet) {
 	fs.String("state", "", "keep graphs in this roll-up state (e.g. looking_for_work)")
 	fs.String("kind", "", "seats to count: work, validation or any (server default)")
-	fs.String("tier", "", "node type to count (server `type` filter)")
+	fs.String("tier", "", "node type to count, sent to the server as its type filter")
 	fs.String("graph", "", "only this graph (id, slug or name)")
 	fs.String("for", "", "me or mine: seats assigned to the caller")
 	fs.Int("watch", 0, "re-poll every N seconds (minimum 5)")

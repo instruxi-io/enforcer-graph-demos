@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"strings"
 )
 
 func init() {
 	register("access", "who can reach a graph: access <graph> [--full-ids]", runAccess)
+	// Declared here so `help access` lists it; takeFullIDs still accepts it
+	// after the graph id, where the shared flag set has stopped parsing.
+	commandFlags["access"] = func(fs *flag.FlagSet) {
+		fs.Bool("full-ids", false, "print whole ids, not the first 8 characters")
+	}
 }
 
 // notFound turns the API's deliberate 404 for an invisible graph into one
@@ -61,6 +67,7 @@ func viaLabel(v []apiAccessSource) string {
 
 func runAccess(ctx context.Context, env *cliEnv, args []string) int {
 	args, full := takeFullIDs(args)
+	full = full || flagSet(env, "full-ids")
 	if len(args) != 1 {
 		fmt.Fprintln(env.errOut, "usage: graphwatch access <graph> [--full-ids]")
 		return exitUsage
