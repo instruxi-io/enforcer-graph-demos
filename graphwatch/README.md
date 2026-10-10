@@ -78,6 +78,8 @@ flags before the positional arguments (`graphwatch nodes --json <graph>`).
 | `graphwatch recruiting` | what one graph recruits for | `graphwatch recruiting <graph>` |
 | `graphwatch work` | the work lobby: graphs looking for workers or validation (`--state`, `--kind`, `--tier`, `--for`, `--graph`, `--watch`, seconds between polls, minimum 5) | `graphwatch work --kind work` |
 | `graphwatch query` | query nodes or runs across every graph you can see; `--all` follows `next` | `graphwatch query nodes --all` |
+| `graphwatch recall` | search a graph's memory (its observations): `--q` text, `--node` key or id, `--file` path, `--kind`, and the global `--limit`; prints kind, node, created_at, run id and the first line of each body, `--json` for the raw payload | `graphwatch recall --q sqlite --limit 5 <graph>` |
+| `graphwatch context` | a graph's context pack: sha256, size, build time and whether recall is enabled | `graphwatch context <graph>` |
 | `graphwatch tail` | follow a graph's event stream as text; `--cursor` resumes from a cursor, `--save-cursor` resumes next run | `graphwatch tail --save-cursor <graph>` |
 | `graphwatch help` | list commands, or describe one | `graphwatch help runs` |
 
