@@ -5,11 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func init() {
-	register("inbox", "list everything that needs a person: open review items and ready gates: inbox <graph> [--json]", runInbox)
+	register("inbox", "list everything that needs a person: open review items and ready gates: inbox <graph> [--json] [--watch secs]", runInbox)
 	register("resolve", "answer a review item (a write): resolve <graph> <item> approve|reject|override [--note text]", runResolve)
 	commandFlags["resolve"] = func(fs *flag.FlagSet) {
 		fs.String("note", "", "why; required for override")
@@ -17,7 +20,7 @@ func init() {
 }
 
 const (
-	inboxUsage   = "usage: graphwatch inbox <graph> [--json]"
+	inboxUsage   = "usage: graphwatch inbox <graph> [--json] [--watch secs]"
 	resolveUsage = "usage: graphwatch resolve <graph> <item> approve|reject|override [--note text]"
 )
 
@@ -107,12 +110,36 @@ func collectInbox(ctx context.Context, c *client, graphID string) ([]inboxEntry,
 func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	// --json is a global flag; accept it after the graph argument too.
 	var pos []string
-	for _, a := range args {
+	watch := time.Duration(0)
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		if a == "--json" || a == "-json" {
 			env.json = true
 			continue
 		}
+		name, val, hasVal := strings.Cut(a, "=")
+		if name == "--watch" || name == "-watch" {
+			if !hasVal {
+				if i+1 >= len(args) {
+					fmt.Fprintln(env.errOut, "graphwatch: --watch needs a number of seconds")
+					return exitUsage
+				}
+				i++
+				val = args[i]
+			}
+			secs, err := strconv.Atoi(val)
+			if err != nil || secs < 1 {
+				fmt.Fprintf(env.errOut, "graphwatch: --watch wants a whole number of seconds, 1 or more, got %q\n", val)
+				return exitUsage
+			}
+			watch = time.Duration(secs) * time.Second
+			continue
+		}
 		pos = append(pos, a)
+	}
+	if watch > 0 && env.json {
+		fmt.Fprintln(env.errOut, "graphwatch: --watch prints text lines and cannot be combined with --json")
+		return exitUsage
 	}
 	if len(pos) != 1 {
 		fmt.Fprintln(env.errOut, inboxUsage)
@@ -137,26 +164,104 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	}
 	if len(entries) == 0 {
 		fmt.Fprintln(env.out, "nothing needs you")
+		if watch > 0 {
+			return watchInbox(ctx, env, graphID, entries, watch)
+		}
 		return exitOK
 	}
 	rows := make([][]string, len(entries))
 	for i, e := range entries {
-		detail := e.Detail
-		if e.Type == "gate" {
-			detail = e.Title
-			if len(e.Options) > 0 {
-				detail += " [" + strings.Join(e.Options, " | ") + "]"
-			}
-		}
-		id := e.ID
-		if e.Type == "review" {
-			id = reviewShortID(id)
-		}
-		rows[i] = []string{fmt.Sprint(i + 1), e.Kind, id, e.Node, e.Age, detail}
+		rows[i] = append([]string{fmt.Sprint(i + 1)}, inboxFields(e)...)
 	}
 	env.table([]string{"#", "KIND", "ID", "NODE", "AGE", "DETAIL"}, rows)
 	fmt.Fprintln(env.out, "\nanswer a review item: graphwatch resolve <graph> <item> approve|reject|override\ndecide a gate:        graphwatch decide <graph> <node> <decision>")
+	if watch > 0 {
+		return watchInbox(ctx, env, graphID, entries, watch)
+	}
 	return exitOK
+}
+
+// inboxFields is the KIND, ID, NODE, AGE and DETAIL columns of one entry.
+func inboxFields(e inboxEntry) []string {
+	detail := e.Detail
+	if e.Type == "gate" {
+		detail = e.Title
+		if len(e.Options) > 0 {
+			detail += " [" + strings.Join(e.Options, " | ") + "]"
+		}
+	}
+	id := e.ID
+	if e.Type == "review" {
+		id = reviewShortID(id)
+	}
+	return []string{e.Kind, id, e.Node, e.Age, detail}
+}
+
+// watchInbox follows the inbox after the first listing: every interval it
+// re-reads and prints only what changed. It returns exitOK when ctx ends
+// (Ctrl-C or SIGTERM), because stopping a watch is how it is meant to end.
+func watchInbox(ctx context.Context, env *cliEnv, graphID string, first []inboxEntry, interval time.Duration) int {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	fetch := func(ctx context.Context) ([]inboxEntry, error) {
+		entries, err := collectInbox(ctx, env.client, graphID)
+		if env.limit > 0 && len(entries) > env.limit {
+			entries = entries[:env.limit]
+		}
+		return entries, err
+	}
+	followInbox(ctx, env.out, env.errOut, first, fetch, t.C, time.Now)
+	return exitOK
+}
+
+// followInbox is the loop behind watchInbox, with the ticker, the clock and
+// the fetch injected so a test drives it without waiting. Items are matched by
+// type and id, not by their printed line, because the AGE column changes every
+// minute and would otherwise read as one item leaving and another arriving.
+func followInbox(ctx context.Context, out, errOut io.Writer, prev []inboxEntry, fetch func(context.Context) ([]inboxEntry, error), ticks <-chan time.Time, now func() time.Time) {
+	identity := func(e inboxEntry) string { return e.Type + " " + e.ID }
+	line := func(e inboxEntry) string { return strings.Join(inboxFields(e), "  ") }
+	known := map[string]inboxEntry{}
+	for _, e := range prev {
+		known[identity(e)] = e
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticks:
+		}
+		cur, err := fetch(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			// A failed refresh is not a change; say so and try again next tick.
+			fmt.Fprintf(errOut, "%s refresh failed: %v\n", now().Format("15:04:05"), err)
+			continue
+		}
+		stamp := now().Format("15:04:05")
+		next := map[string]inboxEntry{}
+		var buf strings.Builder
+		rang := false
+		for _, e := range cur {
+			next[identity(e)] = e
+			if _, ok := known[identity(e)]; !ok {
+				fmt.Fprintf(&buf, "%s + %s\n", stamp, line(e))
+				rang = true
+			}
+		}
+		for _, e := range prev {
+			if _, ok := next[identity(e)]; !ok {
+				fmt.Fprintf(&buf, "%s - %s\n", stamp, line(e))
+			}
+		}
+		if rang {
+			buf.WriteString("\a")
+		}
+		io.WriteString(out, buf.String())
+		known, prev = next, cur
+	}
 }
 
 func runResolve(ctx context.Context, env *cliEnv, args []string) int {

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -124,5 +127,87 @@ func TestResolveRefusals(t *testing.T) {
 	_, errOut, code = runCLI(t, f, "resolve", "g1", "run:aaaa", "approve")
 	if code != 1 || !strings.Contains(errOut, "2 of 3 judges have not voted") {
 		t.Errorf("409: code %d, %q", code, errOut)
+	}
+}
+
+func watchEntry(id, node string) inboxEntry {
+	return inboxEntry{Type: "review", ID: id, Kind: "verdict_pending", Node: node, Detail: "escalated", Age: "2h"}
+}
+
+// followOnce drives followInbox through one tick per fetch result, with a
+// fixed clock, and returns what it printed.
+func followOnce(t *testing.T, first []inboxEntry, passes ...[]inboxEntry) string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ticks := make(chan time.Time)
+	i := 0
+	fetch := func(context.Context) ([]inboxEntry, error) {
+		// The extra tick below repeats the last pass, which changes nothing.
+		cur := passes[min(i, len(passes)-1)]
+		i++
+		return cur, nil
+	}
+	clock := func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.Local) }
+	var out bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		followInbox(ctx, &out, io.Discard, first, fetch, ticks, clock)
+		close(done)
+	}()
+	for range passes {
+		ticks <- time.Time{}
+	}
+	// An unbuffered send is taken only after the previous pass has printed.
+	ticks <- time.Time{}
+	cancel()
+	<-done
+	return out.String()
+}
+
+func TestInboxWatchPrintsOnlyChanges(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	out, _, code := runCLI(t, f, "inbox", "g1")
+	if code != 0 || !strings.Contains(out, "alpha") || !strings.Contains(out, "ship-gate") {
+		t.Fatalf("first listing, code %d:\n%s", code, out)
+	}
+	a, b := watchEntry("run:aaaa", "alpha"), watchEntry("run:cccc", "beta")
+	// The second pass has the same item with an older age: no change.
+	aged := a
+	aged.Age = "3h"
+	got := followOnce(t, []inboxEntry{a}, []inboxEntry{aged}, []inboxEntry{aged, b})
+	lines := strings.Split(strings.TrimRight(strings.ReplaceAll(got, "\a", ""), "\n"), "\n")
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "03:04:05 + ") || !strings.Contains(lines[0], "beta") {
+		t.Fatalf("want exactly one + line for beta, got %q", got)
+	}
+	if quiet := followOnce(t, []inboxEntry{a}, []inboxEntry{a}); quiet != "" {
+		t.Fatalf("nothing changed but printed %q", quiet)
+	}
+}
+
+func TestInboxWatchNewItemRings(t *testing.T) {
+	a, b := watchEntry("run:aaaa", "alpha"), watchEntry("run:cccc", "beta")
+	if got := followOnce(t, []inboxEntry{a}, []inboxEntry{a, b}); !strings.Contains(got, "\a") {
+		t.Fatalf("new item should ring the bell, got %q", got)
+	}
+	if got := followOnce(t, []inboxEntry{a, b}, []inboxEntry{a}); strings.Contains(got, "\a") {
+		t.Fatalf("a removed item should not ring, got %q", got)
+	}
+}
+
+func TestInboxWatchRemovedItemPrintsMinus(t *testing.T) {
+	a, b := watchEntry("run:aaaa", "alpha"), watchEntry("run:cccc", "beta")
+	got := followOnce(t, []inboxEntry{a, b}, []inboxEntry{a})
+	if !strings.HasPrefix(got, "03:04:05 - ") || strings.Count(got, "\n") != 1 || !strings.Contains(got, "beta") {
+		t.Fatalf("want one - line for beta, got %q", got)
+	}
+}
+
+func TestInboxWatchRejectsBadValue(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	for _, v := range []string{"0", "abc", "-3"} {
+		if _, errOut, code := runCLI(t, f, "inbox", "g1", "--watch", v); code != 2 || !strings.Contains(errOut, "--watch") {
+			t.Errorf("--watch %s: code %d, stderr %q", v, code, errOut)
+		}
 	}
 }
