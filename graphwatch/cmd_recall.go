@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,9 @@ import (
 
 // recallNow is the clock --since measures against; tests replace it.
 var recallNow = time.Now
+
+// maxRecallLimit is the largest page the recall endpoint accepts.
+const maxRecallLimit = 50
 
 // parseSince reads a Go duration, or a whole number of days written as "3d".
 func parseSince(v string) (time.Duration, bool) {
@@ -33,13 +37,14 @@ func parseSince(v string) (time.Duration, bool) {
 }
 
 func init() {
-	register("recall", "search a graph's memory: recall <graph> [--q text] [--node key|id] [--file path] [--kind k] [--since 30m|2h|3d]", runRecall)
+	register("recall", "search a graph's memory: recall <graph> [--q text] [--node key|id] [--file path] [--kind k] [--since 30m|2h|3d] [--sort rank|time]", runRecall)
 	commandFlags["recall"] = func(fs *flag.FlagSet) {
 		fs.String("q", "", "full-text query over the observations' bodies")
 		fs.String("node", "", "only observations about this node (key or id)")
 		fs.String("file", "", "only observations that mention this file path")
 		fs.String("kind", "", "only observations of this kind")
 		fs.String("since", "", "only observations created within this long ago (30m, 2h, 3d)")
+		fs.String("sort", "rank", "order of the hits: rank (the server's order) or time (newest first)")
 	}
 	register("context", "show a graph's context pack: its hash, size, build time and whether recall is on: context <graph>", runContext)
 }
@@ -97,6 +102,16 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 			return exitUsage
 		}
 	}
+	order := flagVal(env, "sort")
+	if order != "" && order != "rank" && order != "time" {
+		fmt.Fprintln(env.errOut, "--sort must be rank or time")
+		return exitUsage
+	}
+	// The server caps a page at 50; refuse here rather than send a request it rejects.
+	if env.limit > maxRecallLimit {
+		fmt.Fprintf(env.errOut, "--limit: at most %d\n", maxRecallLimit)
+		return exitUsage
+	}
 	q := url.Values{}
 	for _, name := range []string{"q", "node", "file", "kind"} {
 		if v := flagVal(env, name); v != "" {
@@ -135,6 +150,17 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 			}
 		}
 		hits = kept
+	}
+	if order == "time" {
+		// Stable, so hits with equal or unreadable timestamps keep the server's order.
+		sort.SliceStable(hits, func(i, j int) bool {
+			ti, ei := time.Parse(time.RFC3339, hits[i].CreatedAt)
+			tj, ej := time.Parse(time.RFC3339, hits[j].CreatedAt)
+			if ei != nil || ej != nil {
+				return ei == nil && ej != nil
+			}
+			return ti.After(tj)
+		})
 	}
 	// The server honours limit; this also bounds a server that does not.
 	if env.limit > 0 && len(hits) > env.limit {
