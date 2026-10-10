@@ -111,6 +111,76 @@ func runReview(ctx context.Context, env *cliEnv, args []string) int {
 		rows[i] = []string{reviewShortID(it.ID), it.Kind, reviewShortID(it.NodeID), reviewShortID(it.RunID), it.State, age(it.CreatedAt), it.Reason}
 	}
 	env.table([]string{"ITEM", "KIND", "NODE", "RUN", "STATE", "AGE", "REASON"}, rows)
+	return printGatesAwaiting(ctx, env, pos[0])
+}
+
+// gatesAwaitingDecision returns the gate nodes a person can decide now: status
+// active, failed or needs_review, with every prerequisite done. A requires edge
+// points from the dependent to its prerequisite, so a node's prerequisites are
+// the To side of the edges that start at it.
+func gatesAwaitingDecision(nodes []apiNodeFull, edges []apiEdge) []apiNodeFull {
+	status := map[string]string{}
+	for _, n := range nodes {
+		status[n.ID] = n.Status
+	}
+	blocked := map[string]bool{}
+	for _, e := range edges {
+		if e.Type == "requires" && status[e.ToNodeID] != "done" {
+			blocked[e.FromNodeID] = true
+		}
+	}
+	var out []apiNodeFull
+	for _, n := range nodes {
+		if n.Type != "gate" || blocked[n.ID] {
+			continue
+		}
+		switch n.Status {
+		case "active", "failed", "needs_review":
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// gateOptions reads the decision options a gate declares in data.options.
+func gateOptions(n apiNodeFull) []string {
+	var d struct {
+		Options []string `json:"options"`
+	}
+	if len(n.Data) == 0 || json.Unmarshal(n.Data, &d) != nil {
+		return nil
+	}
+	return d.Options
+}
+
+// printGatesAwaiting adds the gate block under the item table. JSON output is
+// left as the item list, so a script reading it sees no new shape.
+func printGatesAwaiting(ctx context.Context, env *cliEnv, graphID string) int {
+	if env.json {
+		return exitOK
+	}
+	nodes, err := env.client.nodesFull(ctx, graphID)
+	if err != nil {
+		return reportError(env.errOut, err)
+	}
+	edges, err := env.client.edges(ctx, graphID)
+	if err != nil {
+		return reportError(env.errOut, err)
+	}
+	gates := gatesAwaitingDecision(nodes, edges)
+	if len(gates) == 0 {
+		return exitOK
+	}
+	fmt.Fprintln(env.out, "\nGates awaiting a decision")
+	rows := make([][]string, len(gates))
+	for i, g := range gates {
+		opts := strings.Join(gateOptions(g), " | ")
+		if opts == "" {
+			opts = "-"
+		}
+		rows[i] = []string{g.Key, g.Title, g.Status, opts}
+	}
+	env.table([]string{"KEY", "TITLE", "STATUS", "OPTIONS"}, rows)
 	return exitOK
 }
 

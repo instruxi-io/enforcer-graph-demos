@@ -16,6 +16,14 @@ type fakeAPI struct {
 	*httptest.Server
 	mu   sync.Mutex
 	reqs []string
+	// posts answers a POST path with a status and body; bodies records what was sent.
+	posts  map[string]fakeReply
+	bodies []string
+}
+
+type fakeReply struct {
+	status int
+	body   map[string]any
 }
 
 // newFakeAPI serves {"success":true,"data":...} envelopes and records every
@@ -31,8 +39,19 @@ func newFakeAPI(t *testing.T, routes map[string]any) *fakeAPI {
 		}
 		f.mu.Lock()
 		f.reqs = append(f.reqs, rec)
+		reply, isPost := f.posts[strings.TrimPrefix(r.URL.Path, "/api/v1/graph")]
+		if r.Method == http.MethodPost {
+			var b bytes.Buffer
+			b.ReadFrom(r.Body)
+			f.bodies = append(f.bodies, b.String())
+		}
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && isPost {
+			w.WriteHeader(reply.status)
+			json.NewEncoder(w).Encode(reply.body)
+			return
+		}
 		data, ok := routes[strings.TrimPrefix(r.URL.Path, "/api/v1/graph")]
 		if r.Method != http.MethodGet || !ok {
 			w.WriteHeader(http.StatusNotFound)
