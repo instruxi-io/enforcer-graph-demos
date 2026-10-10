@@ -10,15 +10,36 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
+// recallNow is the clock --since measures against; tests replace it.
+var recallNow = time.Now
+
+// parseSince reads a Go duration, or a whole number of days written as "3d".
+func parseSince(v string) (time.Duration, bool) {
+	if n, ok := strings.CutSuffix(v, "d"); ok {
+		days, err := strconv.Atoi(n)
+		if err != nil || days < 0 {
+			return 0, false
+		}
+		return time.Duration(days) * 24 * time.Hour, true
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
+		return 0, false
+	}
+	return d, true
+}
+
 func init() {
-	register("recall", "search a graph's memory: recall <graph> [--q text] [--node key|id] [--file path] [--kind k]", runRecall)
+	register("recall", "search a graph's memory: recall <graph> [--q text] [--node key|id] [--file path] [--kind k] [--since 30m|2h|3d]", runRecall)
 	commandFlags["recall"] = func(fs *flag.FlagSet) {
 		fs.String("q", "", "full-text query over the observations' bodies")
 		fs.String("node", "", "only observations about this node (key or id)")
 		fs.String("file", "", "only observations that mention this file path")
 		fs.String("kind", "", "only observations of this kind")
+		fs.String("since", "", "only observations created within this long ago (30m, 2h, 3d)")
 	}
 	register("context", "show a graph's context pack: its hash, size, build time and whether recall is on: context <graph>", runContext)
 }
@@ -68,6 +89,14 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 		fmt.Fprintln(env.errOut, "usage: graphwatch recall <graph> [--q text] [--node key|id] [--file path] [--kind k] [--limit n]")
 		return exitUsage
 	}
+	var window time.Duration
+	if v := flagVal(env, "since"); v != "" {
+		var ok bool
+		if window, ok = parseSince(v); !ok {
+			fmt.Fprintf(env.errOut, "--since: bad duration %s\n", v)
+			return exitUsage
+		}
+	}
 	q := url.Values{}
 	for _, name := range []string{"q", "node", "file", "kind"} {
 		if v := flagVal(env, name); v != "" {
@@ -95,6 +124,17 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 			return reportError(env.errOut, err)
 		}
 		hits = wrapped.Hits
+	}
+	if window > 0 {
+		cutoff := recallNow().Add(-window)
+		kept := hits[:0]
+		for _, h := range hits {
+			// A hit with no readable timestamp cannot be shown to be recent.
+			if t, err := time.Parse(time.RFC3339, h.CreatedAt); err == nil && !t.Before(cutoff) {
+				kept = append(kept, h)
+			}
+		}
+		hits = kept
 	}
 	// The server honours limit; this also bounds a server that does not.
 	if env.limit > 0 && len(hits) > env.limit {

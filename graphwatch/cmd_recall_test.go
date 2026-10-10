@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func recallRoutes() map[string]any {
@@ -64,5 +65,51 @@ func TestRecallUnknownGraphExitsOne(t *testing.T) {
 		if code != 1 || !strings.Contains(errOut, "no graph nope") {
 			t.Errorf("%s: exit %d, stderr %q", cmd, code, errOut)
 		}
+	}
+}
+
+func withRecallNow(t *testing.T, now string) {
+	t.Helper()
+	fixed, err := time.Parse(time.RFC3339, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := recallNow
+	recallNow = func() time.Time { return fixed }
+	t.Cleanup(func() { recallNow = old })
+}
+
+func TestRecallSinceDropsOldHits(t *testing.T) {
+	withRecallNow(t, "2026-10-02T12:00:00Z")
+	f := newFakeAPI(t, recallRoutes())
+	out, errOut, code := runCLI(t, f, "recall", "--since", "3h", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "flaky on CI") {
+		t.Errorf("dropped the recent hit: %s", out)
+	}
+	if strings.Contains(out, "use sqlite") {
+		t.Errorf("kept the hit older than the window: %s", out)
+	}
+}
+
+func TestRecallSinceAcceptsDays(t *testing.T) {
+	withRecallNow(t, "2026-10-04T11:00:00Z")
+	f := newFakeAPI(t, recallRoutes())
+	out, errOut, code := runCLI(t, f, "recall", "--since", "3d", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if strings.Contains(out, "use sqlite") || !strings.Contains(out, "flaky on CI") {
+		t.Errorf("3d window kept the wrong hits: %s", out)
+	}
+}
+
+func TestRecallSinceBadDurationExitsTwo(t *testing.T) {
+	f := newFakeAPI(t, recallRoutes())
+	_, errOut, code := runCLI(t, f, "recall", "--since", "soon", "g1")
+	if code != 2 || !strings.Contains(errOut, "--since: bad duration soon") {
+		t.Errorf("exit %d, stderr %q", code, errOut)
 	}
 }
