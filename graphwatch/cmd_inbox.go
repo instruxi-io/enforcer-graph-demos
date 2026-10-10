@@ -64,32 +64,20 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "..."
 }
 
-func runInbox(ctx context.Context, env *cliEnv, args []string) int {
-	// --json is a global flag; accept it after the graph argument too.
-	var pos []string
-	for _, a := range args {
-		if a == "--json" || a == "-json" {
-			env.json = true
-			continue
-		}
-		pos = append(pos, a)
-	}
-	if len(pos) != 1 {
-		fmt.Fprintln(env.errOut, inboxUsage)
-		return exitUsage
-	}
-	graphID := pos[0]
-	items, err := env.client.reviewItems(ctx, graphID)
+// collectInbox reads the open review items and the ready gates once. attend
+// calls it on every refresh, so the listing and the follower cannot disagree.
+func collectInbox(ctx context.Context, c *client, graphID string) ([]inboxEntry, error) {
+	items, err := c.reviewItems(ctx, graphID)
 	if err != nil {
-		return reportError(env.errOut, err)
+		return nil, err
 	}
-	nodes, err := env.client.nodesFull(ctx, graphID)
+	nodes, err := c.nodesFull(ctx, graphID)
 	if err != nil {
-		return reportError(env.errOut, err)
+		return nil, err
 	}
-	edges, err := env.client.edges(ctx, graphID)
+	edges, err := c.edges(ctx, graphID)
 	if err != nil {
-		return reportError(env.errOut, err)
+		return nil, err
 	}
 	keys := map[string]string{}
 	for _, n := range nodes {
@@ -112,6 +100,28 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	}
 	for _, g := range gatesAwaitingDecision(nodes, edges) {
 		entries = append(entries, inboxEntry{Type: "gate", ID: g.ID, Kind: "gate", Node: g.Key, Title: g.Title, Options: gateOptions(g), Age: "-"})
+	}
+	return entries, nil
+}
+
+func runInbox(ctx context.Context, env *cliEnv, args []string) int {
+	// --json is a global flag; accept it after the graph argument too.
+	var pos []string
+	for _, a := range args {
+		if a == "--json" || a == "-json" {
+			env.json = true
+			continue
+		}
+		pos = append(pos, a)
+	}
+	if len(pos) != 1 {
+		fmt.Fprintln(env.errOut, inboxUsage)
+		return exitUsage
+	}
+	graphID := pos[0]
+	entries, err := collectInbox(ctx, env.client, graphID)
+	if err != nil {
+		return reportError(env.errOut, err)
 	}
 	if env.limit > 0 && len(entries) > env.limit {
 		entries = entries[:env.limit]
