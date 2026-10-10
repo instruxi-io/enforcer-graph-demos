@@ -113,3 +113,38 @@ func TestRecallSinceBadDurationExitsTwo(t *testing.T) {
 		t.Errorf("exit %d, stderr %q", code, errOut)
 	}
 }
+
+func TestRecallSortTimeNewestFirst(t *testing.T) {
+	f := newFakeAPI(t, recallRoutes())
+	out, errOut, code := runCLI(t, f, "recall", "--sort", "time", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	newer, older := strings.Index(out, "flaky on CI"), strings.Index(out, "use sqlite")
+	if newer < 0 || older < 0 || newer > older {
+		t.Errorf("not newest first: %s", out)
+	}
+	out, _, _ = runCLI(t, f, "recall", "g1")
+	if strings.Index(out, "use sqlite") > strings.Index(out, "flaky on CI") {
+		t.Errorf("default order is not the server's: %s", out)
+	}
+}
+
+func TestRecallLimitOver50ExitsTwoWithoutRequest(t *testing.T) {
+	f := newFakeAPI(t, recallRoutes())
+	_, errOut, code := runCLI(t, f, "recall", "--limit", "51", "g1")
+	if code != 2 || !strings.Contains(errOut, "--limit: at most 50") {
+		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+	if n := len(f.requests()); n != 0 {
+		t.Errorf("server saw %d requests: %v", n, f.requests())
+	}
+}
+
+func TestRecallSortBadValueExitsTwo(t *testing.T) {
+	f := newFakeAPI(t, recallRoutes())
+	_, errOut, code := runCLI(t, f, "recall", "--sort", "size", "g1")
+	if code != 2 || !strings.Contains(errOut, "--sort must be rank or time") {
+		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+}
