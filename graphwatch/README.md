@@ -67,7 +67,7 @@ flags before the positional arguments (`graphwatch nodes --json <graph>`).
 | `graphwatch graphs` | list the graphs you can see (`--archived` includes archived ones), or `graphs show <id\|slug>` for one with its roll-up | `graphwatch graphs` |
 | `graphwatch nodes` | list a graph's tasks (`--status`, `--type`), or `nodes show <graph> <key\|id>` with its runs | `graphwatch nodes --status active <graph>` |
 | `graphwatch edges` | list a graph's dependencies; `--as-flow` prints prerequisite to dependent | `graphwatch edges --as-flow <graph>` |
-| `graphwatch runs` | a node's runs and how they were judged; `runs show <graph> <node> <run>` (`--full` prints evidence in full) | `graphwatch runs <graph> <node>` |
+| `graphwatch runs` | a node's runs and how they were judged; `runs show <graph> <node> <run>` (node by key or id, run by id or unique prefix; `--full` prints evidence in full) | `graphwatch runs <graph> <node>` |
 | `graphwatch review` | human review items holding a graph (`--open`, `--all`), then the gates awaiting a decision; `review show <graph> <item>` | `graphwatch review <graph>` |
 | `graphwatch decide` | record an arbitrator's decision on a gate node (`--note`, `--follow-up`, repeatable); prints the node's new status and the nodes it released | `graphwatch decide <graph> ship-gate ship --note "smoke passed"` |
 | `graphwatch epochs` | replay history; `epochs show <graph> <epoch>` | `graphwatch epochs <graph>` |

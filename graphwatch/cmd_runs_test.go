@@ -18,8 +18,11 @@ func runsRoutes() map[string]any {
 	}
 	return map[string]any{
 		"/graphs/g1/nodes/n1/runs": []map[string]any{run,
-			{"id": "run-0", "attempt": 1, "status": "failed", "started_at": "2026-10-07T09:00:00Z"}},
-		"/graphs/g1/nodes/n1/runs/run-1": run,
+			{"id": "run-0", "attempt": 1, "status": "failed", "started_at": "2026-10-07T09:00:00Z"},
+			{"id": "run-0b", "attempt": 3, "status": "failed", "started_at": "2026-10-07T09:30:00Z"}},
+		"/graphs/g1/nodes":                         []map[string]any{{"id": "n1", "key": "alpha"}},
+		"/graphs/g1/nodes/n1/runs/run-0/verdicts":  []map[string]any{},
+		"/graphs/g1/nodes/n1/runs/run-0b/verdicts": []map[string]any{},
 		"/graphs/g1/nodes/n1/runs/run-1/verdicts": []map[string]any{{
 			"id": "verdict-1234", "state": "rejected", "model": "jev-1", "created_at": "2026-10-07T10:06:00Z",
 			"verification": map[string]any{"state": "rejected", "policy": "gate", "confidence": 0.9, "reason": "unsupported_by_evidence",
@@ -89,4 +92,47 @@ func TestRunsReadOnly(t *testing.T) {
 		t.Fatalf("too few requests: %v", f.requests())
 	}
 	f.onlyReads(t)
+}
+
+func TestRunsShowResolvesPrefix(t *testing.T) {
+	f := newFakeAPI(t, runsRoutes())
+	// The node by key and the run by a unique prefix.
+	out, _, code := runCLI(t, f, "runs", "show", "g1", "alpha", "run-1")
+	if code != 0 || !strings.Contains(out, "run run-1  attempt 2") {
+		t.Fatalf("code %d:\n%s", code, out)
+	}
+	out, _, code = runCLI(t, f, "runs", "show", "g1", "n1", "run-0b")
+	if code != 0 || !strings.Contains(out, "run run-0b  attempt 3") {
+		t.Fatalf("code %d:\n%s", code, out)
+	}
+	_, errOut, code := runCLI(t, f, "runs", "show", "g1", "n1", "zzz")
+	if code != 1 || !strings.Contains(errOut, "no run zzz on n1") {
+		t.Fatalf("code %d: %s", code, errOut)
+	}
+}
+
+func TestRunsShowAmbiguousPrefixExitsOne(t *testing.T) {
+	f := newFakeAPI(t, runsRoutes())
+	_, errOut, code := runCLI(t, f, "runs", "show", "g1", "n1", "run-0")
+	// run-0 is an exact id, so it resolves; run- matches all three.
+	if code != 0 {
+		t.Fatalf("exact id with longer sibling: code %d: %s", code, errOut)
+	}
+	_, errOut, code = runCLI(t, f, "runs", "show", "g1", "n1", "run-")
+	if code != 1 || !strings.Contains(errOut, "ambiguous run id") {
+		t.Fatalf("code %d: %s", code, errOut)
+	}
+}
+
+func TestRunsShowFullPrintsVerdictsAndVotes(t *testing.T) {
+	f := newFakeAPI(t, runsRoutes())
+	out, _, code := runCLI(t, f, "runs", "show", "g1", "n1", "run-1", "--full")
+	if code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	for _, want := range []string{"outcome rejected  model jev-1", "criterion 2: NOT MET (p=0.08)", "jev  accept", "looks right"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
 }

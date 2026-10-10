@@ -126,18 +126,26 @@ func runRunsShow(ctx context.Context, env *cliEnv, args []string) int {
 		fmt.Fprintln(env.errOut, runsUsage)
 		return exitUsage
 	}
-	g, n, id := pos[0], pos[1], pos[2]
-	run, raw, err := env.client.nodeRun(ctx, g, n, id)
-	if err != nil {
-		return reportError(env.errOut, err)
+	g, want := pos[0], pos[2]
+	n, code := resolveNode(ctx, env, g, pos[1])
+	if code != exitOK {
+		return code
 	}
+	run, raw, code := findRun(ctx, env, g, n, want)
+	if code != exitOK {
+		return code
+	}
+	id := run.ID
 	verdicts, err := env.client.runVerdicts(ctx, g, n, id)
 	if err != nil {
 		return reportError(env.errOut, err)
 	}
-	votes, err := env.client.runVotes(ctx, g, n, id)
-	if err != nil {
-		return reportError(env.errOut, err)
+	// Votes exist only for a run a validation config judged.
+	var votes []apiVote
+	if run.Validation != nil {
+		if votes, err = env.client.runVotes(ctx, g, n, id); err != nil {
+			return reportError(env.errOut, err)
+		}
 	}
 	if env.json {
 		out := map[string]any{"run": raw, "verdicts": verdicts, "votes": votes}
@@ -200,6 +208,33 @@ func runRunsShow(ctx context.Context, env *cliEnv, args []string) int {
 		fmt.Fprintln(w)
 	}
 	return exitOK
+}
+
+// findRun resolves a full run id or a unique prefix of one. The API has no GET
+// for a single run, so it lists the node's runs and matches here.
+func findRun(ctx context.Context, env *cliEnv, g, n, want string) (apiRun, json.RawMessage, int) {
+	runs, raws, err := env.client.nodeRuns(ctx, g, n)
+	if err != nil {
+		return apiRun{}, nil, reportError(env.errOut, err)
+	}
+	match := -1
+	for i, r := range runs {
+		if r.ID == want {
+			return r, raws[i], exitOK
+		}
+		if want != "" && strings.HasPrefix(r.ID, want) {
+			if match >= 0 {
+				fmt.Fprintf(env.errOut, "graphwatch: ambiguous run id %q on %s\n", want, n)
+				return apiRun{}, nil, exitRuntime
+			}
+			match = i
+		}
+	}
+	if match < 0 {
+		fmt.Fprintf(env.errOut, "graphwatch: no run %s on %s\n", want, n)
+		return apiRun{}, nil, exitRuntime
+	}
+	return runs[match], raws[match], exitOK
 }
 
 func indent(s string) string {

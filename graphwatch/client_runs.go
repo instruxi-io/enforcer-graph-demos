@@ -95,7 +95,7 @@ func runPath(graphID, nodeID string) string {
 	return "/graphs/" + url.PathEscape(graphID) + "/nodes/" + url.PathEscape(nodeID) + "/runs"
 }
 
-// All three calls are GETs: complete, heartbeat, cancel-request and vote are
+// Every call here is a GET: complete, heartbeat, cancel-request and vote are
 // never reachable from here.
 func (c *client) nodeRuns(ctx context.Context, graphID, nodeID string) ([]apiRun, []json.RawMessage, error) {
 	raw, err := page[json.RawMessage](ctx, c, runPath(graphID, nodeID))
@@ -111,20 +111,6 @@ func (c *client) nodeRuns(ctx context.Context, graphID, nodeID string) ([]apiRun
 		runs = append(runs, run)
 	}
 	return runs, raw, nil
-}
-
-func (c *client) nodeRun(ctx context.Context, graphID, nodeID, runID string) (apiRun, json.RawMessage, error) {
-	var env struct {
-		Data json.RawMessage `json:"data"`
-	}
-	if err := c.do(ctx, "GET", runPath(graphID, nodeID)+"/"+url.PathEscape(runID), nil, &env); err != nil {
-		return apiRun{}, nil, err
-	}
-	var run apiRun
-	if err := json.Unmarshal(env.Data, &run); err != nil {
-		return apiRun{}, nil, err
-	}
-	return run, env.Data, nil
 }
 
 func (c *client) runVerdicts(ctx context.Context, graphID, nodeID, runID string) ([]apiVerdict, error) {

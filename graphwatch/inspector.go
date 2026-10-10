@@ -243,9 +243,6 @@ func loadFromAPI(c *client, graphID string) func(context.Context, string) inspSt
 					latest = r
 				}
 			}
-			if full, _, err := c.nodeRun(ctx, graphID, nodeID, latest.ID); err == nil {
-				latest = full
-			}
 			st.Run = &latest
 			if vs, err := c.runVerdicts(ctx, graphID, nodeID, latest.ID); err == nil {
 				st.Verdicts = vs
