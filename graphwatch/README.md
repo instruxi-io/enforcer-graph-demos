@@ -56,7 +56,7 @@ exits 2.
 ## Commands
 
 `graphwatch` with no arguments opens the picker; `graphwatch <command>` runs one
-of the commands below. All of them are read-only (GET only) except `decide` and `resolve`, which each record one decision with one POST. Global flags:
+of the commands below. All of them are read-only (GET only) except `decide`, `resolve` and `attend`, which write only when you answer: one POST per answer. Global flags:
 `--base <url>  --json  --limit <n>  --no-color  --api-key-file <path>  --timeout <duration>`. Put
 flags before the positional arguments (`graphwatch nodes --json <graph>`).
 `graphwatch help <command>` lists a command's flags.
@@ -72,6 +72,7 @@ flags before the positional arguments (`graphwatch nodes --json <graph>`).
 | `graphwatch decide` | record an arbitrator's decision on a gate node (`--note`, `--follow-up`, repeatable); prints the node's new status and the nodes it released | `graphwatch decide <graph> ship-gate ship --note "smoke passed"` |
 | `graphwatch inbox` | one numbered list of what needs a person: open review items (kind, item, node, age, vote tally and weakest criterion when the item carries them) and gates whose prerequisites are done; prints `nothing needs you` when empty | `graphwatch inbox <graph>` |
 | `graphwatch resolve` | answer a review item with `approve`, `reject` or `override` (`--note`, required for override); prints the node's new status and its dependents. Needs arbitrator rights; the service refuses anyone else | `graphwatch resolve <graph> run:3f9a approve --note "checked"` |
+| `graphwatch attend` | follow a graph and answer what needs you inline (see Attended mode); `--poll <secs>` sets the re-read interval, default 15 | `graphwatch attend <graph>` |
 | `graphwatch epochs` | replay history; `epochs show <graph> <epoch>` | `graphwatch epochs <graph>` |
 | `graphwatch access` | who can reach a graph (`--full-ids`) | `graphwatch access <graph>` |
 | `graphwatch recruiting` | what one graph recruits for | `graphwatch recruiting <graph>` |
@@ -173,6 +174,30 @@ $ graphwatch nodes --json <graph> | jq -r '.[].key'
 design
 build
 ```
+
+## Attended mode
+
+`graphwatch attend <graph>` prints the inbox (the same listing as `inbox`),
+then follows the graph's event stream and prints each new item as it appears,
+with a terminal bell (`\a`) and a status line such as `2 need you`. Any stream
+event triggers a re-read of the review list and the nodes. If the stream is
+refused or drops, it re-reads every `--poll` seconds (default 15) instead. A
+gate counts as ready when its prerequisites are all done.
+
+Input is one line at a time on stdin, so it needs no terminal mode and works the
+same on every platform:
+
+```
+<n> approve|reject|override [note...]   answer review item n (override needs a note)
+<n> decide <decision> [note...]         decide gate n
+list    help    quit
+```
+
+Item numbers are fixed when an item first appears and are not reused. If a gate
+lists `options`, a decision outside them is refused before anything is sent. An
+answer is sent under your own credential, so the service still decides whether
+you may: a 403 prints `you are not an arbitrator on this graph`. At end of
+input `attend` exits 0, so it can be piped.
 
 ## Interactive picker
 
