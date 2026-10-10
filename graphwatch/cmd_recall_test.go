@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -146,5 +147,46 @@ func TestRecallSortBadValueExitsTwo(t *testing.T) {
 	_, errOut, code := runCLI(t, f, "recall", "--sort", "size", "g1")
 	if code != 2 || !strings.Contains(errOut, "--sort must be rank or time") {
 		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+}
+
+func TestRecallEmptyPrintsNoFindings(t *testing.T) {
+	f := newFakeAPI(t, map[string]any{"/graphs/g1/recall": []any{}})
+	out, errOut, code := runCLI(t, f, "recall", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if strings.TrimSpace(out) != "no findings" {
+		t.Errorf("empty result printed %q", out)
+	}
+}
+
+func TestRecallSinceJSONIsValid(t *testing.T) {
+	withRecallNow(t, "2026-10-02T12:00:00Z")
+	f := newFakeAPI(t, recallRoutes())
+	out, errOut, code := runCLI(t, f, "recall", "--since", "3h", "--json", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	var v any
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		t.Errorf("--since with --json is not valid JSON: %v\n%s", err, out)
+	}
+}
+
+func TestRecallSortTimeIsStable(t *testing.T) {
+	same := "2026-10-02T10:00:00Z"
+	f := newFakeAPI(t, map[string]any{"/graphs/g1/recall": []any{
+		map[string]any{"kind": "note", "node_key": "n1", "created_at": same, "body": "first-hit"},
+		map[string]any{"kind": "note", "node_key": "n2", "created_at": same, "body": "second-hit"},
+		map[string]any{"kind": "note", "node_key": "n3", "created_at": same, "body": "third-hit"},
+	}})
+	out, errOut, code := runCLI(t, f, "recall", "--sort", "time", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	a, b, c := strings.Index(out, "first-hit"), strings.Index(out, "second-hit"), strings.Index(out, "third-hit")
+	if a < 0 || b < 0 || c < 0 || !(a < b && b < c) {
+		t.Errorf("equal timestamps were reordered: %s", out)
 	}
 }

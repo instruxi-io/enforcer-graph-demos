@@ -167,7 +167,7 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 		hits = hits[:env.limit]
 	}
 	if len(hits) == 0 {
-		fmt.Fprintln(env.out, "no memory matches")
+		fmt.Fprintln(env.out, "no findings")
 		return exitOK
 	}
 	rows := make([][]string, len(hits))
