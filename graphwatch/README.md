@@ -56,7 +56,7 @@ exits 2.
 ## Commands
 
 `graphwatch` with no arguments opens the picker; `graphwatch <command>` runs one
-of the commands below. All of them are read-only (GET only) except `decide`, which records a gate decision with one POST. Global flags:
+of the commands below. All of them are read-only (GET only) except `decide` and `resolve`, which each record one decision with one POST. Global flags:
 `--base <url>  --json  --limit <n>  --no-color  --api-key-file <path>  --timeout <duration>`. Put
 flags before the positional arguments (`graphwatch nodes --json <graph>`).
 `graphwatch help <command>` lists a command's flags.
@@ -70,6 +70,8 @@ flags before the positional arguments (`graphwatch nodes --json <graph>`).
 | `graphwatch runs` | a node's runs and how they were judged; `runs show <graph> <node> <run>` (node by key or id, run by id or unique prefix; `--full` prints evidence in full) | `graphwatch runs <graph> <node>` |
 | `graphwatch review` | human review items holding a graph (`--open`, `--all`), then the gates awaiting a decision; `review show <graph> <item>` | `graphwatch review <graph>` |
 | `graphwatch decide` | record an arbitrator's decision on a gate node (`--note`, `--follow-up`, repeatable); prints the node's new status and the nodes it released | `graphwatch decide <graph> ship-gate ship --note "smoke passed"` |
+| `graphwatch inbox` | one numbered list of what needs a person: open review items (kind, item, node, age, vote tally and weakest criterion when the item carries them) and gates whose prerequisites are done; prints `nothing needs you` when empty | `graphwatch inbox <graph>` |
+| `graphwatch resolve` | answer a review item with `approve`, `reject` or `override` (`--note`, required for override); prints the node's new status and its dependents. Needs arbitrator rights; the service refuses anyone else | `graphwatch resolve <graph> run:3f9a approve --note "checked"` |
 | `graphwatch epochs` | replay history; `epochs show <graph> <epoch>` | `graphwatch epochs <graph>` |
 | `graphwatch access` | who can reach a graph (`--full-ids`) | `graphwatch access <graph>` |
 | `graphwatch recruiting` | what one graph recruits for | `graphwatch recruiting <graph>` |
