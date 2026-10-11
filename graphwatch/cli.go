@@ -49,6 +49,10 @@ var commands = map[string]command{}
 // they parse in any position (`work --state x`) next to the global ones.
 var commandFlags = map[string]func(fs *flag.FlagSet){}
 
+// commandNotes documents flags a command parses itself from its own arguments
+// (so they cannot live on the shared flag set) for `help <command>`.
+var commandNotes = map[string]string{}
+
 // register is called from a command's init(). A duplicate name is a programming
 // error, so it panics at start-up rather than silently shadowing.
 func register(name, summary string, run func(ctx context.Context, env *cliEnv, args []string) int) {
@@ -188,6 +192,9 @@ func runHelp(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, "flags:")
 		fs.PrintDefaults()
+		if notes := commandNotes[cmd.name]; notes != "" {
+			fmt.Fprintf(stdout, "\n%s command flags (read from the arguments after the graph):\n%s", cmd.name, notes)
+		}
 		return exitOK
 	}
 	fmt.Fprintln(stdout, "usage: graphwatch <command> [flags]")
