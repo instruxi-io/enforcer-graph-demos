@@ -142,6 +142,35 @@ func flagSet(env *cliEnv, name string) bool {
 	return f != nil && f.Value.String() == "true"
 }
 
+// flagsFirst moves every flag the shared flag set knows to the front of args,
+// so `attend g1 --poll 1` parses like `attend --poll 1 g1`: Go's flag package
+// stops at the first positional word. Anything else (positionals, and flags a
+// command parses itself, such as inbox's --watch) keeps its order after them,
+// and a bare -- ends the search.
+func flagsFirst(fs *flag.FlagSet, args []string) []string {
+	var flags, rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			rest = append(rest, args[i+1:]...)
+			break
+		}
+		name, _, hasVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		f := fs.Lookup(name)
+		if !strings.HasPrefix(a, "-") || a == "-" || f == nil {
+			rest = append(rest, a)
+			continue
+		}
+		flags = append(flags, a)
+		if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); !hasVal && !(ok && bf.IsBoolFlag()) && i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	// The leading -- keeps a positional that looks like a flag a positional.
+	return append(append(flags, "--"), rest...)
+}
+
 func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("graphwatch "+cmd.name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -149,7 +178,7 @@ func runCommand(ctx context.Context, cmd command, args []string, stdout, stderr 
 	if setup := commandFlags[cmd.name]; setup != nil {
 		setup(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
@@ -225,6 +254,12 @@ func reportError(w io.Writer, err error) int {
 			msg = ae.msg
 		}
 		fmt.Fprintf(w, "graphwatch: %d %s: %s\n", ae.status, code, msg)
+		return exitRuntime
+	}
+	// status 0 is a transport failure (refused, timed out, no route): say what
+	// went wrong in words before the detail.
+	if errors.As(err, &ae) && ae.status == 0 {
+		fmt.Fprintf(w, "graphwatch: could not reach the API: %s\n", ae.msg)
 		return exitRuntime
 	}
 	fmt.Fprintln(w, "graphwatch:", err)

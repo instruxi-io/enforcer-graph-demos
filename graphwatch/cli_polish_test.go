@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -79,37 +80,72 @@ func TestEveryRegisteredFlagAppearsInHelp(t *testing.T) {
 	}
 }
 
-// A flag that exists but is not in the README tables is a flag nobody finds.
+// A flag that exists but is not in the README is a flag nobody finds. The
+// watch flags are checked against the Flags table; each command's own flags,
+// including ones it parses itself (commandNotes), against that command's row
+// in the Commands table or the table that follows the sentence "`<cmd>` also
+// takes", so one mention elsewhere cannot cover them.
 func TestREADMEListsEveryFlag(t *testing.T) {
 	raw, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	readme := string(raw)
-	seen := map[string]bool{}
-	check := func(fs *flag.FlagSet) {
-		fs.VisitAll(func(f *flag.Flag) { seen[f.Name] = true })
+	lines := strings.Split(string(raw), "\n")
+	section := func(name string) string {
+		var sb strings.Builder
+		for i, l := range lines {
+			switch {
+			case strings.HasPrefix(l, "| `graphwatch "+name+"`"):
+				sb.WriteString(l + "\n")
+			case strings.HasPrefix(l, "`"+name+"` also takes"), l == "### `"+name+"` flags":
+				// The table that follows, up to the next heading.
+				for _, m := range lines[i+1:] {
+					if strings.HasPrefix(m, "#") {
+						break
+					}
+					sb.WriteString(m + "\n")
+				}
+			}
+		}
+		return sb.String()
 	}
+	var missing []string
 	w := flag.NewFlagSet("watch", flag.ContinueOnError)
 	defineWatchFlags(w)
-	check(w)
+	flagsTable := string(raw)
+	w.VisitAll(func(f *flag.Flag) {
+		if !strings.Contains(flagsTable, "`--"+f.Name+"`") {
+			missing = append(missing, "watch --"+f.Name)
+		}
+	})
+	noteFlag := regexp.MustCompile(`(?m)^  --([a-z-]+)`)
 	for name := range commands {
+		own := map[string]bool{}
 		fs := flag.NewFlagSet(name, flag.ContinueOnError)
+		global := flag.NewFlagSet(name, flag.ContinueOnError)
+		newGlobalFlags(global)
 		newGlobalFlags(fs)
 		if setup := commandFlags[name]; setup != nil {
 			setup(fs)
 		}
-		check(fs)
-	}
-	var missing []string
-	for f := range seen {
-		if !strings.Contains(readme, "`--"+f+"`") {
-			missing = append(missing, "--"+f)
+		fs.VisitAll(func(f *flag.Flag) {
+			if global.Lookup(f.Name) == nil {
+				own[f.Name] = true
+			}
+		})
+		for _, m := range noteFlag.FindAllStringSubmatch(commandNotes[name], -1) {
+			own[m[1]] = true
+		}
+		text := section(name)
+		for f := range own {
+			if !strings.Contains(text, "`--"+f+"`") {
+				missing = append(missing, name+" --"+f)
+			}
 		}
 	}
 	sort.Strings(missing)
 	if len(missing) > 0 {
-		t.Errorf("README.md does not list: %s", strings.Join(missing, " "))
+		t.Errorf("README.md does not list, in the command's own section: %s", strings.Join(missing, ", "))
 	}
 }
 

@@ -63,8 +63,9 @@ and say so in the commit.
 8. **Never commit a key, a token or a transcript.** `.npmrc` reads `GITHUB_TOKEN`
    from the environment at install time and is committed without a value.
 9. **Navigation commands are read-only.** Every `graphwatch` command other than
-   `--demo` and `decide` issues GET only (`decide` records a gate decision with
-   one POST, and only when you run it); each lives in `graphwatch/cmd_<name>.go` and
+   `--demo`, `decide`, `resolve` and `attend` issues GET only (`decide` and
+   `resolve` record an answer with one POST, and `attend` posts the same two
+   when you type an answer; none writes unless you run it that way); each lives in `graphwatch/cmd_<name>.go` and
    registers itself from `init()`.
 
 ## Credentials

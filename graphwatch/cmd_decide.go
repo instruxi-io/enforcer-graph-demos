@@ -93,10 +93,10 @@ func runDecide(ctx context.Context, env *cliEnv, args []string) int {
 		}
 		return exitOK
 	}
-	fmt.Fprintf(env.out, "%s decided %q: status %s\n", node.Key, decision, status)
+	fmt.Fprintf(env.out, "%s decided %q: status %s\n", clean(node.Key), decision, clean(status))
 	fmt.Fprintf(env.out, "released %d:\n", len(resp.Frontier))
 	for _, f := range resp.Frontier {
-		fmt.Fprintf(env.out, "  %s  %s\n", f.Key, f.Title)
+		fmt.Fprintf(env.out, "  %s  %s\n", clean(f.Key), clean(f.Title))
 	}
 	return exitOK
 }

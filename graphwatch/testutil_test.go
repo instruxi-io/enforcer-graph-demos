@@ -19,6 +19,16 @@ type fakeAPI struct {
 	// posts answers a POST path with a status and body; bodies records what was sent.
 	posts  map[string]fakeReply
 	bodies []string
+	// afterPost, when set, runs after a POST is recorded and before it is
+	// answered, so a test can change what the next read returns.
+	afterPost func()
+}
+
+// setRoute replaces what a GET path returns, safely while requests are served.
+func (f *fakeAPI) setRoute(routes map[string]any, path string, data any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	routes[path] = data
 }
 
 type fakeReply struct {
@@ -45,14 +55,20 @@ func newFakeAPI(t *testing.T, routes map[string]any) *fakeAPI {
 			b.ReadFrom(r.Body)
 			f.bodies = append(f.bodies, b.String())
 		}
+		hook := f.afterPost
 		f.mu.Unlock()
+		if r.Method == http.MethodPost && hook != nil {
+			hook()
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost && isPost {
 			w.WriteHeader(reply.status)
 			json.NewEncoder(w).Encode(reply.body)
 			return
 		}
+		f.mu.Lock()
 		data, ok := routes[strings.TrimPrefix(r.URL.Path, "/api/v1/graph")]
+		f.mu.Unlock()
 		if r.Method != http.MethodGet || !ok {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]any{"success": false,

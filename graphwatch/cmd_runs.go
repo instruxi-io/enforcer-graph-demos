@@ -156,15 +156,15 @@ func runRunsShow(ctx context.Context, env *cliEnv, args []string) int {
 	}
 	w := env.out
 	if h := run.heldNote(); h != "" {
-		fmt.Fprintln(w, h)
+		fmt.Fprintln(w, clean(h))
 	}
 	fmt.Fprintf(w, "run %s  attempt %d  status %s\n", run.ID, run.Attempt, run.Status)
 	fmt.Fprintf(w, "started %s  finished %s\n", tstamp(&run.StartedAt), tstamp(run.EndedAt))
 	if run.Error != "" {
-		fmt.Fprintf(w, "error: %s\n", run.Error)
+		fmt.Fprintf(w, "error: %s\n", clean(run.Error))
 	}
 	if run.Report != "" {
-		fmt.Fprintf(w, "\nreport:\n%s\n", indent(run.Report))
+		fmt.Fprintf(w, "\nreport:\n%s\n", indent(clean(run.Report)))
 	}
 	if len(run.Outputs) > 0 {
 		b, _ := json.Marshal(run.Outputs)
@@ -192,11 +192,11 @@ func runRunsShow(ctx context.Context, env *cliEnv, args []string) int {
 			fmt.Fprintf(w, "  decided_by %s", v.DecidedBy)
 		}
 		if v.Reason != "" {
-			fmt.Fprintf(w, "  reason %s", v.Reason)
+			fmt.Fprintf(w, "  reason %s", clean(v.Reason))
 		}
 		fmt.Fprintln(w)
 		if len(v.Config) > 0 && string(v.Config) != "null" {
-			fmt.Fprintf(w, "  config: %s\n", v.Config)
+			fmt.Fprintf(w, "  config: %s\n", clean(string(v.Config)))
 		}
 	}
 	fmt.Fprintf(w, "votes (%d):\n", len(votes))
@@ -248,11 +248,11 @@ func printEvidence(w interface{ Write([]byte) (int, error) }, n int, e apiEviden
 		if e.Exit != nil {
 			exit = fmt.Sprint(*e.Exit)
 		}
-		fmt.Fprintf(w, "  %d. command (exit %s): %s\n", n, exit, e.Cmd)
+		fmt.Fprintf(w, "  %d. command (exit %s): %s\n", n, exit, clean(e.Cmd))
 	case "file":
-		fmt.Fprintf(w, "  %d. file: %s\n", n, e.Path)
+		fmt.Fprintf(w, "  %d. file: %s\n", n, clean(e.Path))
 	default:
-		fmt.Fprintf(w, "  %d. %s: %s\n", n, dash(e.Kind), e.Label)
+		fmt.Fprintf(w, "  %d. %s: %s\n", n, clean(dash(e.Kind)), clean(e.Label))
 	}
 	body := e.Output
 	if body == "" {
@@ -267,7 +267,7 @@ func printEvidence(w interface{ Write([]byte) (int, error) }, n int, e apiEviden
 		shown = lines[:evidenceLines]
 	}
 	for _, l := range shown {
-		fmt.Fprintf(w, "       | %s\n", l)
+		fmt.Fprintf(w, "       | %s\n", clean(l))
 	}
 	if len(shown) < len(lines) {
 		fmt.Fprintf(w, "       … %d more lines (--full to expand)\n", len(lines)-len(shown))
@@ -287,7 +287,7 @@ func printVerification(w interface{ Write([]byte) (int, error) }, v apiVerificat
 	}
 	fmt.Fprintln(w)
 	if v.Reason != "" {
-		fmt.Fprintf(w, "    reason: %s\n", v.Reason)
+		fmt.Fprintf(w, "    reason: %s\n", clean(v.Reason))
 	}
 	for i, c := range v.Criteria {
 		// noul is P(met); the verdict's own state, not this split, decides.
@@ -300,9 +300,9 @@ func printVerification(w interface{ Write([]byte) (int, error) }, v apiVerificat
 			}
 			p = fmt.Sprintf(" (p=%.2f)", *c.Noul)
 		}
-		fmt.Fprintf(w, "    criterion %d: %s%s  %s\n", i+1, res, p, c.Text)
+		fmt.Fprintf(w, "    criterion %d: %s%s  %s\n", i+1, res, p, clean(c.Text))
 	}
 	if len(v.Checks) > 0 && string(v.Checks) != "null" && string(v.Checks) != "[]" {
-		fmt.Fprintf(w, "    checks: %s\n", v.Checks)
+		fmt.Fprintf(w, "    checks: %s\n", clean(string(v.Checks)))
 	}
 }
