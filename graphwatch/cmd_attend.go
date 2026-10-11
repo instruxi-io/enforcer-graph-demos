@@ -154,7 +154,7 @@ func printAttendItem(w io.Writer, n int, e inboxEntry) {
 		fmt.Fprintln(w, line)
 		return
 	}
-	fmt.Fprintf(w, "  %d  %s  %s  %s  %s\n", n, e.Kind, e.Node, e.Age, e.Detail)
+	fmt.Fprintf(w, "  %d  %s  %s  %s  %s\n", n, inboxFields(e)[0], e.Node, e.Age, e.Detail)
 }
 
 // attendLine runs one line of input and reports false when the person quit.

@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	register("inbox", "list everything that needs a person: open review items and ready gates: inbox <graph> [--json] [--watch secs]", runInbox)
+	register("inbox", "list everything that needs a person: open review items and ready gates: inbox <graph> [--json] [--watch secs] [--kind review|gate]", runInbox)
 	register("resolve", "answer a review item (a write): resolve <graph> <item> approve|reject|override [--note text]", runResolve)
 	commandFlags["resolve"] = func(fs *flag.FlagSet) {
 		fs.String("note", "", "why; required for override")
@@ -20,15 +20,16 @@ func init() {
 }
 
 const (
-	inboxUsage   = "usage: graphwatch inbox <graph> [--json] [--watch secs]"
+	inboxUsage   = "usage: graphwatch inbox <graph> [--json] [--watch secs] [--kind review|gate]"
 	resolveUsage = "usage: graphwatch resolve <graph> <item> approve|reject|override [--note text]"
 )
 
 // inboxEntry is one line of the inbox, shaped for both the table and --json.
 type inboxEntry struct {
-	Type    string   `json:"type"` // "review" or "gate"
-	ID      string   `json:"id"`   // review item id, or gate node id
-	Kind    string   `json:"kind,omitempty"`
+	Type    string   `json:"type"`                // "review" or "gate"
+	ID      string   `json:"id"`                  // review item id, or gate node id
+	Kind    string   `json:"kind"`                // same as Type: "review" or "gate"
+	Item    string   `json:"item_kind,omitempty"` // the review item's own kind, e.g. verdict_pending
 	Node    string   `json:"node"`
 	Title   string   `json:"title,omitempty"`
 	Detail  string   `json:"detail,omitempty"`
@@ -99,10 +100,10 @@ func collectInbox(ctx context.Context, c *client, graphID string) ([]inboxEntry,
 		if detail == "" {
 			detail = it.Reason
 		}
-		entries = append(entries, inboxEntry{Type: "review", ID: it.ID, Kind: it.Kind, Node: key, Detail: detail, Age: age(it.CreatedAt)})
+		entries = append(entries, inboxEntry{Type: "review", Kind: "review", ID: it.ID, Item: it.Kind, Node: key, Detail: detail, Age: age(it.CreatedAt)})
 	}
 	for _, g := range gatesAwaitingDecision(nodes, edges) {
-		entries = append(entries, inboxEntry{Type: "gate", ID: g.ID, Kind: "gate", Node: g.Key, Title: g.Title, Options: gateOptions(g), Age: "-"})
+		entries = append(entries, inboxEntry{Type: "gate", Kind: "gate", ID: g.ID, Node: g.Key, Title: g.Title, Options: gateOptions(g), Age: "-"})
 	}
 	return entries, nil
 }
@@ -111,6 +112,7 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	// --json is a global flag; accept it after the graph argument too.
 	var pos []string
 	watch := time.Duration(0)
+	kind := ""
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--json" || a == "-json" {
@@ -118,6 +120,22 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 			continue
 		}
 		name, val, hasVal := strings.Cut(a, "=")
+		if name == "--kind" || name == "-kind" {
+			if !hasVal {
+				if i+1 >= len(args) {
+					fmt.Fprintln(env.errOut, "--kind must be review or gate")
+					return exitUsage
+				}
+				i++
+				val = args[i]
+			}
+			if val != "review" && val != "gate" {
+				fmt.Fprintln(env.errOut, "--kind must be review or gate")
+				return exitUsage
+			}
+			kind = val
+			continue
+		}
 		if name == "--watch" || name == "-watch" {
 			if !hasVal {
 				if i+1 >= len(args) {
@@ -150,6 +168,7 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	if err != nil {
 		return reportError(env.errOut, err)
 	}
+	entries = filterKind(entries, kind)
 	if env.limit > 0 && len(entries) > env.limit {
 		entries = entries[:env.limit]
 	}
@@ -165,7 +184,7 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	if len(entries) == 0 {
 		fmt.Fprintln(env.out, "nothing needs you")
 		if watch > 0 {
-			return watchInbox(ctx, env, graphID, entries, watch)
+			return watchInbox(ctx, env, graphID, kind, entries, watch)
 		}
 		return exitOK
 	}
@@ -176,9 +195,23 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	env.table([]string{"#", "KIND", "ID", "NODE", "AGE", "DETAIL"}, rows)
 	fmt.Fprintln(env.out, "\nanswer a review item: graphwatch resolve <graph> <item> approve|reject|override\ndecide a gate:        graphwatch decide <graph> <node> <decision>")
 	if watch > 0 {
-		return watchInbox(ctx, env, graphID, entries, watch)
+		return watchInbox(ctx, env, graphID, kind, entries, watch)
 	}
 	return exitOK
+}
+
+// filterKind keeps only entries of one kind; an empty kind keeps everything.
+func filterKind(entries []inboxEntry, kind string) []inboxEntry {
+	if kind == "" {
+		return entries
+	}
+	var out []inboxEntry
+	for _, e := range entries {
+		if e.Kind == kind {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // inboxFields is the KIND, ID, NODE, AGE and DETAIL columns of one entry.
@@ -194,17 +227,22 @@ func inboxFields(e inboxEntry) []string {
 	if e.Type == "review" {
 		id = reviewShortID(id)
 	}
-	return []string{e.Kind, id, e.Node, e.Age, detail}
+	col := e.Kind
+	if e.Item != "" {
+		col = e.Item
+	}
+	return []string{col, id, e.Node, e.Age, detail}
 }
 
 // watchInbox follows the inbox after the first listing: every interval it
 // re-reads and prints only what changed. It returns exitOK when ctx ends
 // (Ctrl-C or SIGTERM), because stopping a watch is how it is meant to end.
-func watchInbox(ctx context.Context, env *cliEnv, graphID string, first []inboxEntry, interval time.Duration) int {
+func watchInbox(ctx context.Context, env *cliEnv, graphID, kind string, first []inboxEntry, interval time.Duration) int {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	fetch := func(ctx context.Context) ([]inboxEntry, error) {
 		entries, err := collectInbox(ctx, env.client, graphID)
+		entries = filterKind(entries, kind)
 		if env.limit > 0 && len(entries) > env.limit {
 			entries = entries[:env.limit]
 		}
