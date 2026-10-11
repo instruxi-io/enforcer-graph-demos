@@ -45,6 +45,13 @@ cells are written each frame.
 | `--no-color` | false | accepted, but the watch view needs colour: it prints a one-line message and exits 2 (so does `NO_COLOR`) |
 | `--json`, `--limit` | | table commands only; the watch view rejects them |
 
+`inbox` also takes two flags of its own, after the graph argument:
+
+| flag | meaning |
+|---|---|
+| `--watch` | `inbox`: re-read every N seconds (1 or more) and print only changes, `+` for a new item and `-` for one that is gone; cannot be combined with `--json` |
+| `--kind` | `inbox`: `review` or `gate` lists only that kind; any other value exits 2 |
+
 The watch view draws on a terminal of at least 80x24. On a smaller one, with
 stdout redirected, with `NO_COLOR` set or with `TERM=dumb` it prints one line to
 stderr and exits 2 instead of drawing. `graphwatch --version` (or `graphwatch

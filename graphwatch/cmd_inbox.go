@@ -13,6 +13,8 @@ import (
 
 func init() {
 	register("inbox", "list everything that needs a person: open review items and ready gates: inbox <graph> [--json] [--watch secs] [--kind review|gate]", runInbox)
+	commandNotes["inbox"] = "  --watch secs\n    \tre-read every secs seconds (a whole number, 1 or more) and print only changes: + for a new item, - for one that is gone; not valid with --json\n" +
+		"  --kind review|gate\n    \tlist only open review items or only ready gates; any other value exits 2\n"
 	register("resolve", "answer a review item (a write): resolve <graph> <item> approve|reject|override [--note text]", runResolve)
 	commandFlags["resolve"] = func(fs *flag.FlagSet) {
 		fs.String("note", "", "why; required for override")
