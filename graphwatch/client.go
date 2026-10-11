@@ -163,19 +163,21 @@ func (c *client) graph(ctx context.Context, id string) (apiGraph, error) {
 	return r.Data, err
 }
 
-// page walks a list endpoint 200 rows at a time.
+// page walks a list endpoint 200 rows at a time. It stops on a short page, or
+// when the server's meta.total says everything has been read; a server that
+// omits meta.total is paged until a short page.
 func page[T any](ctx context.Context, c *client, path string) ([]T, error) {
 	var all []T
 	for off := 0; ; off += 200 {
 		var r struct {
 			Data []T
-			Meta struct{ Total int }
+			Meta struct{ Total *int }
 		}
 		if err := c.do(ctx, http.MethodGet, path+"?limit=200&offset="+strconv.Itoa(off), nil, &r); err != nil {
 			return nil, err
 		}
 		all = append(all, r.Data...)
-		if len(r.Data) < 200 || len(all) >= r.Meta.Total {
+		if len(r.Data) < 200 || (r.Meta.Total != nil && len(all) >= *r.Meta.Total) {
 			return all, nil
 		}
 	}

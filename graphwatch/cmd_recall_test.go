@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -188,5 +192,82 @@ func TestRecallSortTimeIsStable(t *testing.T) {
 	a, b, c := strings.Index(out, "first-hit"), strings.Index(out, "second-hit"), strings.Index(out, "third-hit")
 	if a < 0 || b < 0 || c < 0 || !(a < b && b < c) {
 		t.Errorf("equal timestamps were reordered: %s", out)
+	}
+}
+
+// pagedRecallAPI serves 120 hits at 50 a page, honouring limit and offset.
+// Hit i is i minutes old, so the only hit inside a 1h window with ids below
+// 60 minutes is deep in the list when the server orders them oldest first.
+func pagedRecallAPI(t *testing.T) *fakeAPI {
+	t.Helper()
+	base, _ := time.Parse(time.RFC3339, "2026-10-02T12:00:00Z")
+	f := &fakeAPI{}
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.reqs = append(f.reqs, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		f.mu.Unlock()
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		off, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		var page []any
+		for i := off; i < 120 && len(page) < limit; i++ {
+			// Hits 0..99 are two days old; 100..119 are recent.
+			age := 48 * time.Hour
+			if i >= 100 {
+				age = time.Duration(i-99) * time.Minute
+			}
+			page = append(page, map[string]any{"kind": "note", "node_key": "n" + strconv.Itoa(i),
+				"created_at": base.Add(-age).Format(time.RFC3339), "body": "hit-" + strconv.Itoa(i)})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "data": page})
+	}))
+	t.Cleanup(f.Close)
+	return f
+}
+
+func TestRecallSinceFetchesBeyondFirstPage(t *testing.T) {
+	withRecallNow(t, "2026-10-02T12:00:00Z")
+	f := pagedRecallAPI(t)
+	out, errOut, code := runCLI(t, f, "recall", "--since", "1h", "--limit", "5", "g1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if strings.Contains(out, "no findings") || !strings.Contains(out, "hit-100") {
+		t.Errorf("did not find the recent hit below the first page: %s", out)
+	}
+	if strings.Contains(out, "hit-5 ") || strings.Count(out, "hit-") != 5 {
+		t.Errorf("want exactly 5 recent hits: %s", out)
+	}
+}
+
+func TestRecallZeroSinceExitsTwo(t *testing.T) {
+	f := newFakeAPI(t, recallRoutes())
+	for _, v := range []string{"0s", "0d", "0"} {
+		_, errOut, code := runCLI(t, f, "recall", "--since", v, "g1")
+		if code != 2 || !strings.Contains(errOut, "--since") {
+			t.Errorf("--since %s: exit %d, stderr %q", v, code, errOut)
+		}
+	}
+	if n := len(f.requests()); n != 0 {
+		t.Errorf("server saw %d requests", n)
+	}
+}
+
+func TestPageContinuesWithoutMetaTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		off, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		var rows []map[string]any
+		for i := off; i < 450 && len(rows) < 200; i++ {
+			rows = append(rows, map[string]any{"id": strconv.Itoa(i)})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "data": rows})
+	}))
+	defer srv.Close()
+	c := newClient(srv.URL, apiKey("k"))
+	got, err := page[map[string]any](context.Background(), c, "/graphs/g/nodes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 450 {
+		t.Errorf("read %d rows, want 450", len(got))
 	}
 }
