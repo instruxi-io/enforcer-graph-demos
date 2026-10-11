@@ -248,3 +248,58 @@ func TestInboxJSONCarriesKind(t *testing.T) {
 		t.Errorf("filtered json:\n%s", jout)
 	}
 }
+
+// An empty inbox under --watch says so once, then prints only changes: a
+// second empty read adds nothing, and an arrival prints one + line.
+func TestInboxWatchEmptyPrintsNothingNeedsYouOnce(t *testing.T) {
+	f := newFakeAPI(t, map[string]any{
+		"/graphs/g1/review": []map[string]any{},
+		"/graphs/g1/nodes":  []map[string]any{},
+		"/graphs/g1/edges":  []map[string]any{},
+	})
+	var out, errb bytes.Buffer
+	env := &cliEnv{client: newClient(f.URL, apiKey("test-key")), out: &out, errOut: &errb}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int)
+	go func() { done <- runInbox(ctx, env, []string{"g1", "--watch", "1"}) }()
+	// Let at least one 1s tick re-read the still-empty inbox before stopping.
+	time.Sleep(1500 * time.Millisecond)
+	cancel()
+	if code := <-done; code != 0 {
+		t.Fatalf("code %d, stderr %q", code, errb.String())
+	}
+	if n := strings.Count(out.String(), "nothing needs you"); n != 1 || strings.Count(out.String(), "\n") != 1 {
+		t.Fatalf("want the empty line exactly once and nothing else, got %q", out.String())
+	}
+	got := followOnce(t, nil, nil, []inboxEntry{watchEntry("run:aaaa", "alpha")})
+	if strings.Count(got, "\n") != 1 || !strings.Contains(got, " + ") || strings.Contains(got, "nothing needs you") {
+		t.Fatalf("want one + line after an empty start, got %q", got)
+	}
+}
+
+func TestInboxUnknownGraphExitsOne(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	out, errOut, code := runCLI(t, f, "inbox", "nope")
+	if code != 1 || !strings.Contains(errOut, "no graph nope") || out != "" {
+		t.Fatalf("code %d, out %q, stderr %q", code, out, errOut)
+	}
+}
+
+func TestInboxKindJSONIsValid(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	for _, kind := range []string{"review", "gate"} {
+		jout, _, code := runCLI(t, f, "inbox", "g1", "--json", "--kind", kind)
+		var items []inboxEntry
+		if code != 0 || json.Unmarshal([]byte(jout), &items) != nil || len(items) != 1 || items[0].Kind != kind {
+			t.Errorf("--kind %s: code %d:\n%s", kind, code, jout)
+		}
+	}
+	// A kind with no matches is an empty array, not null.
+	f2 := newFakeAPI(t, map[string]any{
+		"/graphs/g1/review": []map[string]any{}, "/graphs/g1/nodes": []map[string]any{}, "/graphs/g1/edges": []map[string]any{},
+	})
+	jout, _, _ := runCLI(t, f2, "inbox", "g1", "--json", "--kind", "gate")
+	if strings.TrimSpace(jout) != "[]" {
+		t.Errorf("empty filtered json: %q", jout)
+	}
+}
