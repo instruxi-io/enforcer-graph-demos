@@ -13,13 +13,13 @@ import (
 )
 
 func init() {
-	register("attend", "follow a graph and take your answers inline (writes only when you answer): attend <graph> [--poll secs]", runAttend)
+	register("attend", "follow a graph and take your answers inline (writes only when you answer): attend [--poll secs] <graph>", runAttend)
 	commandFlags["attend"] = func(fs *flag.FlagSet) {
 		fs.Int("poll", 15, "seconds between inbox re-reads when the stream is quiet or unavailable")
 	}
 }
 
-const attendUsage = "usage: graphwatch attend <graph> [--poll secs]"
+const attendUsage = "usage: graphwatch attend [--poll secs] <graph>"
 
 const attendHelp = `<n> approve|reject|override [note...]   answer review item n (override needs a note)
 <n> decide <decision> [note...]         decide gate n
@@ -50,7 +50,9 @@ func runAttend(ctx context.Context, env *cliEnv, args []string) int {
 	var current []inboxEntry
 	numOf := func(e inboxEntry) int { return nums[e.Type+":"+e.ID] }
 
-	refresh := func(announce bool) bool {
+	// Every item not yet numbered is announced, whichever read finds it: one
+	// that arrives while you are answering another must not wait for `list`.
+	refresh := func() bool {
 		entries, err := collectInbox(ctx, env.client, graphID)
 		if err != nil {
 			reportError(env.errOut, err)
@@ -62,10 +64,8 @@ func runAttend(ctx context.Context, env *cliEnv, args []string) int {
 			if _, seen := nums[k]; !seen {
 				next++
 				nums[k] = next
-				if announce {
-					printAttendItem(env.out, next, e)
-					bell = true
-				}
+				printAttendItem(env.out, next, e)
+				bell = true
 			}
 		}
 		changed := len(entries) != len(current)
@@ -130,9 +130,9 @@ func runAttend(ctx context.Context, env *cliEnv, args []string) int {
 		case <-ctx.Done():
 			return exitOK
 		case <-wake:
-			refresh(true)
+			refresh()
 		case <-tick.C:
-			refresh(true)
+			refresh()
 		case line, ok := <-lines:
 			if !ok {
 				return exitOK
@@ -140,21 +140,21 @@ func runAttend(ctx context.Context, env *cliEnv, args []string) int {
 			if !attendLine(ctx, env, graphID, line, current, numOf) {
 				return exitOK
 			}
-			refresh(false)
+			refresh()
 		}
 	}
 }
 
 func printAttendItem(w io.Writer, n int, e inboxEntry) {
 	if e.Type == "gate" {
-		line := fmt.Sprintf("  %d  gate  %s  %s", n, e.Node, e.Title)
+		line := fmt.Sprintf("  %d  gate  %s  %s", n, clean(e.Node), clean(e.Title))
 		if len(e.Options) > 0 {
-			line += " [" + strings.Join(e.Options, " | ") + "]"
+			line += " [" + clean(strings.Join(e.Options, " | ")) + "]"
 		}
 		fmt.Fprintln(w, line)
 		return
 	}
-	fmt.Fprintf(w, "  %d  %s  %s  %s  %s\n", n, inboxFields(e)[0], e.Node, e.Age, e.Detail)
+	fmt.Fprintf(w, "  %d  %s  %s  %s  %s\n", n, inboxFields(e)[0], clean(e.Node), e.Age, clean(e.Detail))
 }
 
 // attendLine runs one line of input and reports false when the person quit.
@@ -204,7 +204,7 @@ func attendLine(ctx context.Context, env *cliEnv, graphID, line string, current 
 			return true
 		}
 		if len(item.Options) > 0 && !contains(item.Options, f[2]) {
-			fmt.Fprintf(env.errOut, "%q is not one of the options: %s\n", f[2], strings.Join(item.Options, " | "))
+			fmt.Fprintf(env.errOut, "%q is not one of the options: %s\n", f[2], clean(strings.Join(item.Options, " | ")))
 			return true
 		}
 		runDecide(ctx, noteEnv(env, strings.Join(f[3:], " ")), []string{graphID, item.ID, f[2]})

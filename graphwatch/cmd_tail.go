@@ -123,7 +123,7 @@ func tailLine(data json.RawMessage, keys map[string]string) string {
 		CreatedAt    time.Time      `json:"created_at"`
 	}
 	if json.Unmarshal(data, &e) != nil {
-		return string(data)
+		return clean(string(data))
 	}
 	res, tr, actor := "-", "", "-"
 	if e.ResourceID != nil {
@@ -142,5 +142,5 @@ func tailLine(data json.RawMessage, keys map[string]string) string {
 	if ts.IsZero() {
 		ts = time.Now()
 	}
-	return fmt.Sprintf("%s %s %s%s %s", ts.Local().Format("15:04:05"), e.Verb, res, tr, actor)
+	return fmt.Sprintf("%s %s %s%s %s", ts.Local().Format("15:04:05"), clean(e.Verb), clean(res), clean(tr), clean(actor))
 }

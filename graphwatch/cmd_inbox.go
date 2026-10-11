@@ -239,7 +239,7 @@ func inboxFields(e inboxEntry) []string {
 	if e.Item != "" {
 		col = e.Item
 	}
-	return []string{col, id, e.Node, e.Age, detail}
+	return []string{clean(col), clean(id), clean(e.Node), e.Age, clean(detail)}
 }
 
 // watchInbox follows the inbox after the first listing: every interval it
@@ -411,10 +411,10 @@ func runResolve(ctx context.Context, env *cliEnv, args []string) int {
 		}
 		return exitOK
 	}
-	fmt.Fprintf(env.out, "%s %s on %s: node status %s\n", found.Kind, action, held.Key, orUnknown(held.Status))
+	fmt.Fprintf(env.out, "%s %s on %s: node status %s\n", clean(found.Kind), action, clean(held.Key), clean(orUnknown(held.Status)))
 	fmt.Fprintf(env.out, "dependents: %d\n", len(deps))
 	for _, d := range deps {
-		fmt.Fprintf(env.out, "  %s  %s  %s\n", d.Key, orUnknown(d.Status), d.WorkState)
+		fmt.Fprintf(env.out, "  %s  %s  %s\n", clean(d.Key), clean(orUnknown(d.Status)), clean(d.WorkState))
 	}
 	return exitOK
 }

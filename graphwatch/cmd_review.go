@@ -239,7 +239,7 @@ func runReviewShow(ctx context.Context, env *cliEnv, args []string) int {
 	fmt.Fprintf(w, "item:   %s\nkind:   %s\nstate:  %s\nage:    %s\n", found.ID, found.Kind, found.State, age(found.CreatedAt))
 	fmt.Fprintf(w, "node:   %s\n", labelled(found.NodeID, keys))
 	fmt.Fprintf(w, "run:    %s\n", found.RunID)
-	fmt.Fprintf(w, "reason: %s\n\n", found.Reason)
+	fmt.Fprintf(w, "reason: %s\n\n", clean(found.Reason))
 	fmt.Fprintf(w, "dependents (unblocked when this item is resolved): %d\n", len(deps))
 	printDependents(w, deps, keys)
 	return exitOK
@@ -247,9 +247,9 @@ func runReviewShow(ctx context.Context, env *cliEnv, args []string) int {
 
 func labelled(id string, keys map[string]string) string {
 	if k := keys[id]; k != "" {
-		return id + " (" + k + ")"
+		return clean(id) + " (" + clean(k) + ")"
 	}
-	return id
+	return clean(id)
 }
 
 func printDependents(w io.Writer, deps []string, keys map[string]string) {

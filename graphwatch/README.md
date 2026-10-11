@@ -64,14 +64,17 @@ exits 2.
 
 `graphwatch` with no arguments opens the picker; `graphwatch <command>` runs one
 of the commands below. All of them are read-only (GET only) except `decide`, `resolve` and `attend`, which write only when you answer: one POST per answer. Global flags:
-`--base <url>  --json  --limit <n>  --no-color  --api-key-file <path>  --timeout <duration>`. Put
-flags before the positional arguments (`graphwatch nodes --json <graph>`).
+`--base <url>  --json  --limit <n>  --no-color  --api-key-file <path>  --timeout <duration>`. Flags may come before or after the
+positional arguments (`graphwatch nodes --json <graph>` and `graphwatch nodes <graph> --json` are the same).
 `graphwatch help <command>` lists a command's flags.
+Text that comes from the API (titles, reasons, reports, evidence) is printed with
+control characters shown as escapes such as `\x1b`, so a hostile title cannot
+move the cursor or clear your screen; `--json` output is untouched.
 
 | command | what it does | worked example |
 |---|---|---|
 | `graphwatch whoami` | the account, tenant and role the API resolves, and where the credential came from | `graphwatch whoami` |
-| `graphwatch graphs` | list the graphs you can see (`--archived` includes archived ones), or `graphs show <id\|slug>` for one with its roll-up | `graphwatch graphs` |
+| `graphwatch graphs` | list the graphs you can see (`--archived` includes archived ones, `--full-ids` prints whole ids), or `graphs show <id\|slug>` for one with its roll-up | `graphwatch graphs` |
 | `graphwatch nodes` | list a graph's tasks (`--status`, `--type`), or `nodes show <graph> <key\|id>` with its runs | `graphwatch nodes --status active <graph>` |
 | `graphwatch edges` | list a graph's dependencies; `--as-flow` prints prerequisite to dependent | `graphwatch edges --as-flow <graph>` |
 | `graphwatch runs` | a node's runs and how they were judged; `runs show <graph> <node> <run>` (node by key or id, run by id or unique prefix; `--full` prints evidence in full) | `graphwatch runs <graph> <node>` |
@@ -79,13 +82,13 @@ flags before the positional arguments (`graphwatch nodes --json <graph>`).
 | `graphwatch decide` | record an arbitrator's decision on a gate node (`--note`, `--follow-up`, repeatable); prints the node's new status and the nodes it released | `graphwatch decide <graph> ship-gate ship --note "smoke passed"` |
 | `graphwatch inbox` | one numbered list of what needs a person: open review items (kind, item, node, age, vote tally and weakest criterion when the item carries them) and gates whose prerequisites are done; prints `nothing needs you` when empty | `graphwatch inbox <graph> [--watch secs] [--kind review|gate]` |
 | `graphwatch resolve` | answer a review item with `approve`, `reject` or `override` (`--note`, required for override); prints the node's new status and its dependents. Needs arbitrator rights; the service refuses anyone else | `graphwatch resolve <graph> run:3f9a approve --note "checked"` |
-| `graphwatch attend` | follow a graph and answer what needs you inline (see Attended mode); `--poll <secs>` sets the re-read interval, default 15 | `graphwatch attend <graph>` |
+| `graphwatch attend` | follow a graph and answer what needs you inline (see Attended mode); `--poll` sets the re-read interval in seconds, default 15 | `graphwatch attend <graph>` |
 | `graphwatch epochs` | replay history; `epochs show <graph> <epoch>` | `graphwatch epochs <graph>` |
 | `graphwatch access` | who can reach a graph (`--full-ids`) | `graphwatch access <graph>` |
 | `graphwatch recruiting` | what one graph recruits for | `graphwatch recruiting <graph>` |
 | `graphwatch work` | the work lobby: graphs looking for workers or validation (`--state`, `--kind`, `--tier`, `--for`, `--graph`, `--watch`, seconds between polls, minimum 5) | `graphwatch work --kind work` |
 | `graphwatch query` | query nodes or runs across every graph you can see; `--all` follows `next` | `graphwatch query nodes --all` |
-| `graphwatch recall` | search a graph's memory (its observations): `--q` text, `--node` key or id, `--file` path, `--kind`, `--since` (a window such as `30m`, `2h` or `3d`, applied to created_at after the fetch; not applied with `--json`), `--sort rank|time` (rank keeps the server's order, time is newest first; not applied with `--json`), and the global `--limit` (at most 50 for recall, otherwise exit 2); prints kind, node, created_at, run id and the first line of each body, `--json` for the raw payload | `graphwatch recall --q sqlite --limit 5 <graph>` |
+| `graphwatch recall` | search a graph's memory (its observations): `--q` text, `--node` key or id, `--file` path, `--kind`, `--since` (a window such as `30m`, `2h` or `3d`, applied to created_at after the fetch; not applied with `--json`), `--sort` (`rank` or `time`; rank keeps the server's order, time is newest first; not applied with `--json`), and the global `--limit` (at most 50 for recall, otherwise exit 2); prints kind, node, created_at, run id and the first line of each body, `--json` for the raw payload | `graphwatch recall --q sqlite --limit 5 <graph>` |
 | `graphwatch context` | a graph's context pack: sha256, size, build time and whether recall is enabled | `graphwatch context <graph>` |
 | `graphwatch tail` | follow a graph's event stream as text; `--cursor` resumes from a cursor, `--save-cursor` resumes next run | `graphwatch tail --save-cursor <graph>` |
 | `graphwatch help` | list commands, or describe one | `graphwatch help runs` |

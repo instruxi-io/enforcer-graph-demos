@@ -145,7 +145,7 @@ func runNodesShow(ctx context.Context, env *cliEnv, graphID, want string) int {
 		return exitOK
 	}
 	w := env.out
-	fmt.Fprintf(w, "key:         %s\nid:          %s\ntype:        %s\ntitle:       %s\n", n.Key, n.ID, n.Type, n.Title)
+	fmt.Fprintf(w, "key:         %s\nid:          %s\ntype:        %s\ntitle:       %s\n", clean(n.Key), clean(n.ID), clean(n.Type), clean(n.Title))
 	fmt.Fprintf(w, "status:      %s\nwork_state:  %s\n", n.Status, nodeDash(n.WorkState))
 	if n.Reclaimable {
 		fmt.Fprintln(w, "reclaimable: true")
@@ -155,12 +155,12 @@ func runNodesShow(ctx context.Context, env *cliEnv, graphID, want string) int {
 	}
 	fmt.Fprintf(w, "assignee:    %s\n", nodeDash(n.Assignee))
 	if n.Description != "" {
-		fmt.Fprintf(w, "\ndescription:\n%s\n", n.Description)
+		fmt.Fprintf(w, "\ndescription:\n%s\n", clean(n.Description))
 	}
 	if acc, ok := nodeData(n.Data)["acceptance"].([]any); ok && len(acc) > 0 {
 		fmt.Fprintln(w, "\nacceptance:")
 		for _, a := range acc {
-			fmt.Fprintf(w, "  %v\n", a)
+			fmt.Fprintf(w, "  %s\n", clean(fmt.Sprint(a)))
 		}
 	}
 	fmt.Fprintf(w, "\nruns: %d\n", len(runs))
