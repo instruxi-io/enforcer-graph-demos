@@ -211,3 +211,40 @@ func TestInboxWatchRejectsBadValue(t *testing.T) {
 		}
 	}
 }
+
+func TestInboxKindGateHidesReviewItems(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	out, _, code := runCLI(t, f, "inbox", "g1", "--kind", "gate")
+	if code != 0 || !strings.Contains(out, "ship-gate") || strings.Contains(out, "alpha") {
+		t.Fatalf("code %d:\n%s", code, out)
+	}
+	out, _, code = runCLI(t, f, "inbox", "g1", "--kind=review")
+	if code != 0 || !strings.Contains(out, "alpha") || strings.Contains(out, "ship-gate") {
+		t.Fatalf("code %d:\n%s", code, out)
+	}
+}
+
+func TestInboxKindBadValueExitsTwo(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	out, errOut, code := runCLI(t, f, "inbox", "g1", "--kind", "bogus")
+	if code != 2 || !strings.Contains(errOut, "--kind must be review or gate") || out != "" {
+		t.Fatalf("code %d, out %q, err %q", code, out, errOut)
+	}
+}
+
+func TestInboxJSONCarriesKind(t *testing.T) {
+	f := newFakeAPI(t, inboxRoutes())
+	jout, _, code := runCLI(t, f, "inbox", "g1", "--json")
+	var items []map[string]any
+	if code != 0 || json.Unmarshal([]byte(jout), &items) != nil || len(items) != 2 {
+		t.Fatalf("code %d:\n%s", code, jout)
+	}
+	if items[0]["kind"] != "review" || items[1]["kind"] != "gate" {
+		t.Errorf("kinds %v %v", items[0]["kind"], items[1]["kind"])
+	}
+	jout, _, _ = runCLI(t, f, "inbox", "g1", "--json", "--kind", "gate")
+	items = nil
+	if json.Unmarshal([]byte(jout), &items) != nil || len(items) != 1 || items[0]["kind"] != "gate" {
+		t.Errorf("filtered json:\n%s", jout)
+	}
+}
