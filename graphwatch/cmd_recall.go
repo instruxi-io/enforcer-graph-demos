@@ -20,6 +20,25 @@ var recallNow = time.Now
 // maxRecallLimit is the largest page the recall endpoint accepts.
 const maxRecallLimit = 50
 
+// maxRecallScan bounds how many hits --since or --sort time will read.
+const maxRecallScan = 500
+
+// decodeHits reads a recall payload: a list of hits, or an object that carries
+// them under "hits".
+func decodeHits(d json.RawMessage) ([]recallHit, error) {
+	var hits []recallHit
+	if err := json.Unmarshal(d, &hits); err == nil {
+		return hits, nil
+	}
+	var wrapped struct {
+		Hits []recallHit `json:"hits"`
+	}
+	if err := json.Unmarshal(d, &wrapped); err != nil {
+		return nil, err
+	}
+	return wrapped.Hits, nil
+}
+
 // parseSince reads a Go duration, or a whole number of days written as "3d".
 func parseSince(v string) (time.Duration, bool) {
 	if n, ok := strings.CutSuffix(v, "d"); ok {
@@ -101,6 +120,10 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 			fmt.Fprintf(env.errOut, "--since: bad duration %s\n", v)
 			return exitUsage
 		}
+		if window <= 0 {
+			fmt.Fprintf(env.errOut, "--since: must be positive, got %s\n", v)
+			return exitUsage
+		}
 	}
 	order := flagVal(env, "sort")
 	if order != "" && order != "rank" && order != "time" {
@@ -118,27 +141,48 @@ func runRecall(ctx context.Context, env *cliEnv, args []string) int {
 			q.Set(name, v)
 		}
 	}
-	if env.limit > 0 {
-		q.Set("limit", strconv.Itoa(env.limit))
-	}
-	d, code := graphGet(ctx, env, pos[0], "/recall", q)
-	if code != exitOK {
-		return code
-	}
-	if env.json || flagVal(env, "json") == "true" {
-		fmt.Fprintln(env.out, string(d))
-		return exitOK
-	}
-	// The payload is a list of hits, or an object that carries them under "hits".
+	asJSON := env.json || flagVal(env, "json") == "true"
+	// --since and --sort time act on the whole result set, so they read pages
+	// (50 a page, at most maxRecallScan hits) and cut to --limit afterwards.
+	// Otherwise one page of --limit hits is enough.
+	scan := !asJSON && (window > 0 || order == "time")
 	var hits []recallHit
-	if err := json.Unmarshal(d, &hits); err != nil {
-		var wrapped struct {
-			Hits []recallHit `json:"hits"`
+	if scan {
+		q.Set("limit", strconv.Itoa(maxRecallLimit))
+		for off := 0; off < maxRecallScan; off += maxRecallLimit {
+			q.Set("offset", strconv.Itoa(off))
+			d, code := graphGet(ctx, env, pos[0], "/recall", q)
+			if code != exitOK {
+				return code
+			}
+			page, err := decodeHits(d)
+			if err != nil {
+				return reportError(env.errOut, err)
+			}
+			hits = append(hits, page...)
+			if len(page) < maxRecallLimit {
+				break
+			}
+			if off+maxRecallLimit >= maxRecallScan {
+				fmt.Fprintf(env.errOut, "graphwatch: read the first %d hits only; narrow the search with --q, --node or --kind\n", maxRecallScan)
+			}
 		}
-		if err := json.Unmarshal(d, &wrapped); err != nil {
+	} else {
+		if env.limit > 0 {
+			q.Set("limit", strconv.Itoa(env.limit))
+		}
+		d, code := graphGet(ctx, env, pos[0], "/recall", q)
+		if code != exitOK {
+			return code
+		}
+		if asJSON {
+			fmt.Fprintln(env.out, string(d))
+			return exitOK
+		}
+		var err error
+		if hits, err = decodeHits(d); err != nil {
 			return reportError(env.errOut, err)
 		}
-		hits = wrapped.Hits
 	}
 	if window > 0 {
 		cutoff := recallNow().Add(-window)
