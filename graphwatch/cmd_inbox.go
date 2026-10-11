@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -168,6 +169,11 @@ func runInbox(ctx context.Context, env *cliEnv, args []string) int {
 	graphID := pos[0]
 	entries, err := collectInbox(ctx, env.client, graphID)
 	if err != nil {
+		var ae *apiError
+		if errors.As(err, &ae) && ae.status == http.StatusNotFound {
+			fmt.Fprintf(env.errOut, "graphwatch: no graph %s\n", graphID)
+			return exitRuntime
+		}
 		return reportError(env.errOut, err)
 	}
 	entries = filterKind(entries, kind)
